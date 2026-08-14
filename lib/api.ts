@@ -42,12 +42,26 @@ async function request(url: string): Promise<any> {
   return await res.json();
 }
 
+export type Kind = "movie" | "tv";
+
+export interface Genre {
+  id: number;
+  name: string;
+}
+
 export const api = {
   trendingMovies: (page = 1) => request(`${BASE}/api/tmdb/trending/movie/week?page=${page}`),
   trendingTv: (page = 1) => request(`${BASE}/api/tmdb/trending/tv/week?page=${page}`),
+  trendingAll: (page = 1) => request(`${BASE}/api/tmdb/trending/all/week?page=${page}`),
   search: (query: string, page = 1) =>
     request(`${BASE}/api/tmdb/search/multi?query=${encodeURIComponent(query)}&page=${page}`),
   movie: (id: number | string) => request(`${BASE}/api/tmdb/movie/${id}`),
   tv: (id: number | string) => request(`${BASE}/api/tmdb/tv/${id}`),
   season: (id: number | string, season: number) => request(`${BASE}/api/tmdb/tv/${id}/season/${season}`),
+  genreList: (kind: Kind) => request(`${BASE}/api/tmdb/genre/${kind}/list`),
+  discover: (kind: Kind, genreId: number | string, page = 1) =>
+    request(`${BASE}/api/tmdb/discover/${kind}?with_genres=${genreId}&page=${page}`),
+  similar: (kind: Kind, id: number | string, page = 1) =>
+    request(`${BASE}/api/tmdb/${kind}/${id}/similar?page=${page}`),
+  credits: (kind: Kind, id: number | string) => request(`${BASE}/api/tmdb/${kind}/${id}/credits`),
 };

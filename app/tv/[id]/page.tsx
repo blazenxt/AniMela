@@ -4,10 +4,13 @@ import { use, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { useApi } from "@/lib/useApi";
+import { useLibrary } from "@/lib/library";
 import Player, { PlayerSource } from "@/components/Player";
 import Loading from "@/components/Loading";
 import ErrorState from "@/components/ErrorState";
 import SeasonEpisodes from "@/components/SeasonEpisodes";
+import CastList from "@/components/CastList";
+import SimilarRow from "@/components/SimilarRow";
 import { backdrop, poster } from "@/lib/images";
 import { videasyTv } from "@/lib/players";
 
@@ -15,6 +18,7 @@ export default function TvPage({ params }: { params: Promise<{ id: string }> }) 
   const { id } = use(params);
   const router = useRouter();
   const { data, loading, error, retry } = useApi(() => api.tv(id), [id]);
+  const { isWatched, toggleWatch, recordContinue } = useLibrary();
 
   const seasons = data?.seasons || [];
   const realSeasons = seasons.filter((s: any) => s.season_number > 0);
@@ -43,6 +47,20 @@ export default function TvPage({ params }: { params: Promise<{ id: string }> }) 
     router.replace(`/tv/${id}?s=${s}&e=${e}`, { scroll: false });
   };
 
+  // remember where the user left off
+  useEffect(() => {
+    if (!data?.id) return;
+    recordContinue({
+      id: data.id,
+      type: "tv",
+      title: data.name,
+      poster_path: data.poster_path,
+      season,
+      episode,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, season, episode, recordContinue]);
+
   if (loading) return <Loading />;
   if (error || !data) return <ErrorState message={error || "Series not found."} onRetry={retry} />;
 
@@ -53,6 +71,7 @@ export default function TvPage({ params }: { params: Promise<{ id: string }> }) 
   const year = data.first_air_date ? data.first_air_date.slice(0, 4) : "";
   const genres: string[] = (data.genres || []).map((g: any) => g.name);
   const rating = typeof data.vote_average === "number" ? data.vote_average : null;
+  const watched = isWatched(data.id);
 
   return (
     <div>
@@ -95,6 +114,21 @@ export default function TvPage({ params }: { params: Promise<{ id: string }> }) 
                 ))}
               </div>
             )}
+            <button
+              onClick={() =>
+                toggleWatch({
+                  id: data.id,
+                  type: "tv",
+                  title: data.name,
+                  poster_path: data.poster_path,
+                })
+              }
+              className={`mt-4 inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition ${
+                watched ? "bg-rose-500/20 text-rose-300 ring-1 ring-rose-500/40" : "bg-white/10 text-white hover:bg-white/15"
+              }`}
+            >
+              <span>{watched ? "♥" : "♡"}</span> {watched ? "In My List" : "Add to My List"}
+            </button>
           </div>
         </div>
 
@@ -120,6 +154,10 @@ export default function TvPage({ params }: { params: Promise<{ id: string }> }) 
               onSelect={select}
             />
           </div>
+
+          <CastList kind="tv" id={data.id} />
+
+          <SimilarRow kind="tv" id={data.id} />
         </div>
       </div>
     </div>

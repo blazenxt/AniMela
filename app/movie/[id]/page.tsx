@@ -3,19 +3,33 @@
 import { use, useEffect } from "react";
 import { api } from "@/lib/api";
 import { useApi } from "@/lib/useApi";
+import { useLibrary } from "@/lib/library";
 import Player, { PlayerSource } from "@/components/Player";
 import Loading from "@/components/Loading";
 import ErrorState from "@/components/ErrorState";
+import CastList from "@/components/CastList";
+import SimilarRow from "@/components/SimilarRow";
 import { backdrop, poster } from "@/lib/images";
 import { videasyMovie, vidfastMovie } from "@/lib/players";
 
 export default function MoviePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const { data, loading, error, retry } = useApi(() => api.movie(id), [id]);
+  const { isWatched, toggleWatch, recordContinue } = useLibrary();
 
   useEffect(() => {
     if (data?.title) document.title = `${data.title} — AniMela`;
   }, [data]);
+
+  useEffect(() => {
+    if (!data?.id) return;
+    recordContinue({
+      id: data.id,
+      type: "movie",
+      title: data.title,
+      poster_path: data.poster_path,
+    });
+  }, [data, recordContinue]);
 
   if (loading) return <Loading />;
   if (error || !data) return <ErrorState message={error || "Movie not found."} onRetry={retry} />;
@@ -24,6 +38,8 @@ export default function MoviePage({ params }: { params: Promise<{ id: string }> 
     { label: "Videasy", src: videasyMovie(id) },
     { label: "VidFast", src: vidfastMovie(id) },
   ];
+
+  const watched = isWatched(data.id);
 
   const year = data.release_date ? data.release_date.slice(0, 4) : "";
   const genres: string[] = (data.genres || []).map((g: any) => g.name);
@@ -67,6 +83,21 @@ export default function MoviePage({ params }: { params: Promise<{ id: string }> 
                 ))}
               </div>
             )}
+            <button
+              onClick={() =>
+                toggleWatch({
+                  id: data.id,
+                  type: "movie",
+                  title: data.title,
+                  poster_path: data.poster_path,
+                })
+              }
+              className={`mt-4 inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition ${
+                watched ? "bg-rose-500/20 text-rose-300 ring-1 ring-rose-500/40" : "bg-white/10 text-white hover:bg-white/15"
+              }`}
+            >
+              <span>{watched ? "♥" : "♡"}</span> {watched ? "In My List" : "Add to My List"}
+            </button>
           </div>
         </div>
 
@@ -79,6 +110,9 @@ export default function MoviePage({ params }: { params: Promise<{ id: string }> 
                 <p className="leading-relaxed text-zinc-300">{data.overview}</p>
               </div>
             )}
+            <div className="mt-8">
+              <CastList kind="movie" id={data.id} />
+            </div>
           </div>
 
           <aside className="space-y-4 text-sm text-zinc-400">
@@ -110,6 +144,10 @@ export default function MoviePage({ params }: { params: Promise<{ id: string }> 
               </a>
             )}
           </aside>
+        </div>
+
+        <div className="mt-10">
+          <SimilarRow kind="movie" id={data.id} />
         </div>
       </div>
     </div>
