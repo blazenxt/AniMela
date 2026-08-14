@@ -27,6 +27,42 @@ npm run build && npm start
 
 The server binds to `0.0.0.0` so it can be previewed / deployed anywhere.
 
+## Deploy to Vercel
+
+The repo is ready to deploy as-is — `vercel.json` sets the framework, build and install
+commands, and the `next build` passes cleanly.
+
+### Option A — Vercel dashboard (easiest)
+
+1. Push this repo to GitHub (already done).
+2. Go to [vercel.com/new](https://vercel.com/new) and **Import** the repo.
+3. Vercel auto-detects **Next.js** — leave the defaults:
+   - Build command: `next build`
+   - Install command: `npm install`
+   - Output directory: *(leave empty)*
+4. Click **Deploy**. Done — you get a `*.vercel.app` URL.
+
+### Option B — Vercel CLI
+
+```bash
+npm i -g vercel
+vercel login
+vercel          # preview deploy
+vercel --prod   # production deploy
+```
+
+### Optional environment variables
+
+| Variable | Purpose | Default |
+| --- | --- | --- |
+| `NEXT_PUBLIC_CINEZO_BASE` | Override the Cinezo API host if the domain changes | `https://cinezo.net` |
+
+> **Why client-side fetching?** Metadata is fetched from the browser first (no CORS problem
+> when Cinezo allows it), and falls back to the same-origin `/api/proxy` route on Vercel.
+> This keeps the app working even though Cinezo sits behind Cloudflare, and keeps Vercel
+> serverless usage minimal. Playback embeds (Videasy/VidFast) always run in the visitor's
+> browser, so hosting location never affects whether video plays.
+
 ---
 
 ## The APIs used
