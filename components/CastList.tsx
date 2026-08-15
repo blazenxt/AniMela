@@ -20,7 +20,10 @@ export default function CastList({ kind, id }: { kind: Kind; id: number | string
 
   return (
     <div>
-      <h2 className="mb-4 text-lg font-bold text-white">Cast</h2>
+      <h2 className="mb-4 flex items-center gap-2 font-display text-lg font-bold text-white">
+        <span className="h-5 w-1 rounded-full bg-violet-500" />
+        Cast
+      </h2>
       <div className="flex gap-3 overflow-x-auto pb-2 no-scrollbar">
         {cast.map((c) => (
           <div key={c.id} className="w-24 shrink-0 text-center">

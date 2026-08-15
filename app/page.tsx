@@ -9,7 +9,7 @@ import MediaRow from "@/components/MediaRow";
 import Loading from "@/components/Loading";
 import { MediaItem, itemTitle } from "@/lib/types";
 import { backdrop, poster } from "@/lib/images";
-import { PlayIcon, SparklesIcon } from "@/components/Icons";
+import { PlayIcon, SparklesIcon, StarIcon } from "@/components/Icons";
 
 export default function Home() {
   const movies = useApi(() => api.trendingMovies(1), []);
@@ -34,7 +34,7 @@ export default function Home() {
   return (
     <div>
       {hero && (
-        <div className="relative h-[60vh] min-h-[340px] w-full overflow-hidden sm:h-[68vh] sm:min-h-[420px]">
+        <div className="relative h-[62vh] min-h-[380px] w-full overflow-hidden sm:h-[72vh] sm:min-h-[460px]">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={backdrop(hero.backdrop_path, "w1280")}
@@ -43,28 +43,48 @@ export default function Home() {
             fetchPriority="high"
             className="absolute inset-0 h-full w-full object-cover"
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-[#07070c] via-[#07070c]/55 to-transparent" />
-          <div className="absolute inset-0 bg-gradient-to-r from-[#07070c]/90 via-transparent to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-t from-ink-950 via-ink-950/45 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-r from-ink-950/95 via-ink-950/40 to-transparent" />
 
-          <div className="relative z-10 mx-auto flex h-full max-w-7xl flex-col justify-end px-4 pb-16 sm:px-6">
-            <span className="mb-3 inline-flex w-fit items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-white backdrop-blur">
-              <SparklesIcon className="h-3.5 w-3.5 text-amber-400" />
-              Featured
-            </span>
-            <h1 className="break-words text-2xl font-black text-white drop-shadow-lg sm:text-5xl md:text-6xl">
-              {itemTitle(hero)}
-            </h1>
-            {hero.overview && (
-              <p className="mt-4 line-clamp-3 max-w-2xl text-zinc-200">{hero.overview}</p>
-            )}
-            <div className="mt-6 flex flex-wrap gap-3">
-              <Link
-                href={heroType === "tv" ? `/tv/${hero.id}` : `/movie/${hero.id}`}
-                className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-fuchsia-500 to-purple-600 px-6 py-3 font-bold text-white shadow-lg shadow-purple-900/40 transition hover:opacity-90"
-              >
-                <PlayIcon className="h-5 w-5" />
-                Watch now
-              </Link>
+          <div className="relative z-10 mx-auto flex h-full max-w-7xl flex-col justify-end px-4 pb-14 sm:px-6 sm:pb-20">
+            <div className="animate-fade-up">
+              <span className="mb-3 inline-flex w-fit items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-white ring-1 ring-white/15 backdrop-blur">
+                <SparklesIcon className="h-3.5 w-3.5 text-amber-300" />
+                Featured
+              </span>
+
+              <h1 className="max-w-3xl break-words font-display text-3xl font-bold text-white drop-shadow-lg sm:text-5xl md:text-6xl">
+                {itemTitle(hero)}
+              </h1>
+
+              <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-zinc-300">
+                {typeof hero.vote_average === "number" && hero.vote_average > 0 && (
+                  <span className="inline-flex items-center gap-1 font-semibold text-amber-300">
+                    <StarIcon className="h-4 w-4" />
+                    {hero.vote_average.toFixed(1)}
+                  </span>
+                )}
+                {(hero.release_date || hero.first_air_date) && (
+                  <span>{(hero.release_date || hero.first_air_date || "").slice(0, 4)}</span>
+                )}
+                <span className="uppercase tracking-wide text-zinc-400">
+                  {heroType === "tv" ? "Series" : "Movie"}
+                </span>
+              </div>
+
+              {hero.overview && (
+                <p className="mt-4 line-clamp-3 max-w-2xl text-zinc-200">{hero.overview}</p>
+              )}
+
+              <div className="mt-6 flex flex-wrap gap-3">
+                <Link
+                  href={heroType === "tv" ? `/tv/${hero.id}` : `/movie/${hero.id}`}
+                  className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-fuchsia-500 to-violet-600 px-6 py-3 font-bold text-white shadow-lg shadow-violet-900/50 transition hover:opacity-90"
+                >
+                  <PlayIcon className="h-5 w-5" />
+                  Watch now
+                </Link>
+              </div>
             </div>
           </div>
         </div>
@@ -140,9 +160,9 @@ export default function Home() {
           </section>
         )}
 
-        <MediaRow title="Trending Movies" items={movies.data?.results || []} accent="bg-fuchsia-500" />
-        <MediaRow title="Trending Series" items={series.data?.results || []} accent="bg-indigo-500" />
-        <MediaRow title="Popular Anime" items={animeItems} accent="bg-rose-500" />
+        <MediaRow title="Trending Movies" items={movies.data?.results || []} accent="bg-fuchsia-500" viewAllHref="/movies" />
+        <MediaRow title="Trending Series" items={series.data?.results || []} accent="bg-indigo-500" viewAllHref="/series" />
+        <MediaRow title="Popular Anime" items={animeItems} accent="bg-rose-500" viewAllHref="/anime" />
       </div>
     </div>
   );

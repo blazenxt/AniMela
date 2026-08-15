@@ -68,14 +68,16 @@ export default function MoviePage({ params }: { params: Promise<{ id: string }> 
             className="w-36 shrink-0 rounded-2xl shadow-2xl ring-1 ring-white/10 sm:w-56"
           />
           <div className="min-w-0 flex-1 pb-1">
-            <h1 className="break-words text-2xl font-black text-white sm:text-5xl">{data.title}</h1>
+            <h1 className="break-words font-display text-2xl font-bold text-white sm:text-5xl">
+              {data.title}
+            </h1>
             {data.tagline && <p className="mt-1 text-zinc-400 italic">“{data.tagline}”</p>}
             <div className="mt-3 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-sm text-zinc-400 sm:justify-start">
               {year && <span>{year}</span>}
               {data.runtime && <span>• {data.runtime} min</span>}
               {rating !== null && (
-                <span className="inline-flex items-center gap-1">
-                  • <StarIcon className="h-3.5 w-3.5 text-yellow-400" /> {rating.toFixed(1)}
+                <span className="inline-flex items-center gap-1 font-semibold text-amber-300">
+                  • <StarIcon className="h-3.5 w-3.5" /> {rating.toFixed(1)}
                 </span>
               )}
               {data.status && <span>• {data.status}</span>}
@@ -83,7 +85,10 @@ export default function MoviePage({ params }: { params: Promise<{ id: string }> 
             {genres.length > 0 && (
               <div className="mt-3 flex flex-wrap justify-center gap-2 sm:justify-start">
                 {genres.map((g) => (
-                  <span key={g} className="rounded-full bg-white/10 px-2 py-1 text-xs text-zinc-300">
+                  <span
+                    key={g}
+                    className="rounded-full bg-white/5 px-3 py-1 text-xs font-medium text-zinc-200 ring-1 ring-white/10"
+                  >
                     {g}
                   </span>
                 ))}
@@ -99,7 +104,9 @@ export default function MoviePage({ params }: { params: Promise<{ id: string }> 
                 })
               }
               className={`mt-4 inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition ${
-                watched ? "bg-rose-500/20 text-rose-300 ring-1 ring-rose-500/40" : "bg-white/10 text-white hover:bg-white/15"
+                watched
+                  ? "bg-rose-500/15 text-rose-300 ring-1 ring-rose-500/40"
+                  : "bg-white/5 text-white ring-1 ring-white/10 hover:bg-white/10"
               }`}
             >
               <HeartIcon filled={watched} className="h-4 w-4" />
@@ -120,7 +127,10 @@ export default function MoviePage({ params }: { params: Promise<{ id: string }> 
             />
             {data.overview && (
               <div className="mt-6">
-                <h2 className="mb-2 text-lg font-bold text-white">Overview</h2>
+                <h2 className="mb-2 flex items-center gap-2 font-display text-lg font-bold text-white">
+                  <span className="h-5 w-1 rounded-full bg-violet-500" />
+                  Overview
+                </h2>
                 <p className="leading-relaxed text-zinc-300">{data.overview}</p>
               </div>
             )}

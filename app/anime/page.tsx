@@ -23,7 +23,7 @@ export default function AnimePage() {
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6">
-      <h1 className="mb-1 text-3xl font-black text-white">Anime</h1>
+      <h1 className="mb-1 font-display text-3xl font-bold text-white">Anime</h1>
       <p className="mb-6 text-sm text-zinc-500">
         Discover anime series &amp; movies — Japanese animation, ranked by popularity or rating.
       </p>

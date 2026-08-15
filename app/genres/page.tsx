@@ -49,7 +49,7 @@ function GenreGroup({
 export default function GenresPage() {
   return (
     <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6">
-      <h1 className="mb-2 text-3xl font-black text-white">Browse by Genre</h1>
+      <h1 className="mb-2 font-display text-3xl font-bold text-white">Browse by Genre</h1>
       <p className="mb-8 text-sm text-zinc-500">Pick a genre to explore movies or series.</p>
       <div className="space-y-10">
         <GenreGroup title="Movies" kind="movie" />

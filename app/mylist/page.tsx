@@ -63,7 +63,7 @@ export default function MyListPage() {
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6">
-      <h1 className="mb-8 text-3xl font-black text-white">My List</h1>
+      <h1 className="mb-8 font-display text-3xl font-bold text-white">My List</h1>
 
       <section className="mb-12">
         <div className="mb-4 flex items-center gap-2">

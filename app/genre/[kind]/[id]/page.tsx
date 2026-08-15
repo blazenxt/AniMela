@@ -11,7 +11,7 @@ function GenreResults({ kind, id }: { kind: Kind; id: string }) {
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6">
-      <h1 className="mb-2 text-3xl font-black text-white capitalize">{name}</h1>
+      <h1 className="mb-2 font-display text-3xl font-bold text-white capitalize">{name}</h1>
       <p className="mb-6 text-sm text-zinc-500">{kind === "movie" ? "Movies" : "Series"} in this genre.</p>
       <MediaGrid
         key={`${kind}-${id}`}

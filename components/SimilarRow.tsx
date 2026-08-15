@@ -14,7 +14,10 @@ export default function SimilarRow({ kind, id }: { kind: Kind; id: number | stri
 
   return (
     <div>
-      <h2 className="mb-4 text-lg font-bold text-white">More like this</h2>
+      <h2 className="mb-4 flex items-center gap-2 font-display text-lg font-bold text-white">
+        <span className="h-5 w-1 rounded-full bg-violet-500" />
+        More like this
+      </h2>
       <div className="flex gap-4 overflow-x-auto pb-2 no-scrollbar">
         {items.map((m) => (
           <MediaCard key={m.id} item={m} className="w-40 shrink-0 snap-start" />

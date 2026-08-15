@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { MediaItem } from "@/lib/types";
 import MediaCard from "./MediaCard";
-import Loading from "./Loading";
+import { SkeletonCard } from "./Loading";
 
 interface PageResult {
   results: MediaItem[];
@@ -59,7 +59,15 @@ export default function MediaGrid({
     }
   };
 
-  if (loading) return <Loading />;
+  if (loading) {
+    return (
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+        {Array.from({ length: 12 }).map((_, i) => (
+          <SkeletonCard key={i} />
+        ))}
+      </div>
+    );
+  }
 
   return (
     <>

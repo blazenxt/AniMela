@@ -17,7 +17,15 @@ export default function Navbar() {
   const router = useRouter();
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 8);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
@@ -27,7 +35,6 @@ export default function Navbar() {
     router.push(`/search?q=${encodeURIComponent(query)}`);
   };
 
-  // close the mobile menu on outside click / Escape
   useEffect(() => {
     if (!open) return;
     const onClick = (e: MouseEvent) => {
@@ -45,13 +52,23 @@ export default function Navbar() {
   }, [open]);
 
   return (
-    <header className="sticky top-0 z-50 border-b border-white/5 bg-[#0b0b12]/85 backdrop-blur-xl">
+    <header
+      className={`sticky top-0 z-50 border-b transition-colors ${
+        scrolled ? "border-white/10 bg-ink-900/90" : "border-transparent bg-ink-950/60"
+      } backdrop-blur-xl`}
+    >
       <div className="mx-auto flex h-16 max-w-7xl items-center gap-3 px-4 sm:gap-5 sm:px-6">
-        <Link href="/" className="shrink-0 text-xl font-black tracking-tight" onClick={() => setOpen(false)}>
-          <span className="bg-gradient-to-r from-fuchsia-400 via-purple-400 to-indigo-400 bg-clip-text text-transparent">
-            Ani
+        <Link
+          href="/"
+          onClick={() => setOpen(false)}
+          className="flex shrink-0 items-center gap-2 font-display text-xl font-bold tracking-tight"
+        >
+          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-fuchsia-500 to-violet-600 text-sm font-black text-white shadow-lg shadow-violet-900/40">
+            A
           </span>
-          <span className="text-white">Mela</span>
+          <span className="text-white">
+            Ani<span className="bg-gradient-to-r from-fuchsia-400 to-violet-400 bg-clip-text text-transparent">Mela</span>
+          </span>
         </Link>
 
         {/* Desktop nav */}
@@ -85,7 +102,7 @@ export default function Navbar() {
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="Search…"
-              className="w-full min-w-0 rounded-full border border-white/10 bg-white/5 py-2 pl-10 pr-4 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500/60"
+              className="w-full min-w-0 rounded-full border border-white/10 bg-white/5 py-2 pl-10 pr-4 text-sm text-white placeholder:text-zinc-500 transition focus:border-violet-500/50 focus:outline-none focus:ring-2 focus:ring-violet-500/30"
             />
           </div>
         </form>
@@ -109,9 +126,9 @@ export default function Navbar() {
         </button>
       </div>
 
-      {/* Mobile dropdown menu */}
+      {/* Mobile dropdown */}
       {open && (
-        <div ref={menuRef} className="border-t border-white/5 bg-[#0b0b12] px-4 py-2 md:hidden">
+        <div ref={menuRef} className="border-t border-white/10 bg-ink-900 px-4 py-2 md:hidden">
           <nav className="flex flex-col">
             {LINKS.map((l) => (
               <Link
