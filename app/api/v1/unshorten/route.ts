@@ -31,12 +31,28 @@ export async function GET(req: NextRequest) {
       const urls = [...html.matchAll(/https?:\/\/[^\s"'<>\\]+/gi)].map((m) => m[0]);
       const decoded = extractDecodedUrls(html);
       const decodedTexts = extractDecodedTexts(html);
+      // reverse-engineering: forms, ajax endpoints, hidden inputs
+      const forms = [...html.matchAll(/<form[^>]*>/gi)].map((m) => m[0]);
+      const actions = [...html.matchAll(/action\s*=\s*["']([^"']+)["']/gi)].map((m) => m[1]);
+      const ajax = [...html.matchAll(/(?:fetch|\.post|\.get|\.ajax|XMLHttpRequest|\.open)\s*\([^)]{0,120}/gi)].map((m) => m[0]);
+      const hidden = [...html.matchAll(/<input[^>]*type=["']hidden["'][^>]*>/gi)].map((m) => m[0]);
+      const hasCaptcha = /captcha|recaptcha|hcaptcha|g-recaptcha/i.test(html);
+      // any relative paths that look like link endpoints
+      const endpoints = [...html.matchAll(/["'](\/[a-zA-Z0-9_\/-]{2,40})["']/g)]
+        .map((m) => m[1])
+        .filter((p) => /link|view|go|get|dl|download|ajax|api|unlock|redirect/i.test(p));
       return ok({
         finalUrl: res.url,
         htmlLength: html.length,
         urls,
         decodedUrls: decoded,
         decodedTexts,
+        forms,
+        actions,
+        ajax,
+        hidden,
+        hasCaptcha,
+        endpoints,
       });
     } catch (e) {
       return fail(502, e instanceof Error ? e.message : "Upstream error");
