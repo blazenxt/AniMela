@@ -21,6 +21,7 @@ const ENDPOINTS = [
   { method: "GET", path: "/api/v1/hindi/search", desc: "Search Hindi/Bollywood movies", params: "q, page" },
   { method: "GET", path: "/api/v1/hindi/recent", desc: "Latest Hindi/Bollywood movies", params: "page" },
   { method: "GET", path: "/api/v1/hindi/{provider}/{id}", desc: "Hindi movie detail + download links" },
+  { method: "GET", path: "/api/v1/unshorten", desc: "Resolve shortener/protector to direct link", params: "url" },
   { method: "GET", path: "/api/v1/movie/{id}/similar", desc: "Similar movies", params: "page" },
   { method: "GET", path: "/api/v1/tv/{id}/similar", desc: "Similar series", params: "page" },
   { method: "GET", path: "/api/v1/movie/{id}/credits", desc: "Movie cast & crew" },
