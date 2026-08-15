@@ -66,7 +66,7 @@ export default function TvPage({ params }: { params: Promise<{ id: string }> }) 
   if (error || !data) return <ErrorState message={error || "Series not found."} onRetry={retry} />;
 
   const sources: PlayerSource[] = [
-    { label: "Videasy", src: videasyTv(id, season, episode) },
+    { label: "Server 1", src: videasyTv(id, season, episode) },
   ];
 
   const year = data.first_air_date ? data.first_air_date.slice(0, 4) : "";

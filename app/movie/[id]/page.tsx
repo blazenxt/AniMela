@@ -36,8 +36,8 @@ export default function MoviePage({ params }: { params: Promise<{ id: string }> 
   if (error || !data) return <ErrorState message={error || "Movie not found."} onRetry={retry} />;
 
   const sources: PlayerSource[] = [
-    { label: "Videasy", src: videasyMovie(id) },
-    { label: "VidFast", src: vidfastMovie(id) },
+    { label: "Server 1", src: videasyMovie(id) },
+    { label: "Server 2", src: vidfastMovie(id) },
   ];
 
   const watched = isWatched(data.id);
