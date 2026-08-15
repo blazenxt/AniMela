@@ -7,7 +7,7 @@
  * UI, and the resolver returns the first playable result.
  *
  * Provider order is configurable via `ANIME_PROVIDER_ORDER` (comma-separated,
- * default "hianime,animepahe"). Server-side only — client goes through
+ * default "animepahe"). Server-side only — client goes through
  * `/api/v1/anime/{id}/episodes` and `/api/v1/anime/{id}/stream`.
  */
 
@@ -51,15 +51,13 @@ export interface StreamProvider {
   resolveEpisode(ref: AnimeRef, episode: number, dub: boolean): Promise<StreamResult | null>;
 }
 
-import { HiAnimeProvider } from "./providers/hianime";
 import { AnimePaheProvider } from "./providers/animepahe";
 
 const PROVIDERS: Record<string, StreamProvider> = {
-  hianime: HiAnimeProvider,
   animepahe: AnimePaheProvider,
 };
 
-const ORDER = (process.env.ANIME_PROVIDER_ORDER || "hianime,animepahe")
+const ORDER = (process.env.ANIME_PROVIDER_ORDER || "animepahe")
   .split(",")
   .map((s) => s.trim().toLowerCase())
   .filter(Boolean);

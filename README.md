@@ -56,7 +56,8 @@ The server binds to `0.0.0.0` so it can be previewed or deployed anywhere.
 | `NEXT_PUBLIC_CINEZO_BASE` | Override the metadata API host if the domain changes | `https://cinezo.org` |
 | `ANILIST_BASE` | AniList GraphQL endpoint | `https://graphql.anilist.co` |
 | `JIKAN_BASE` | Jikan v4 base (metadata fallback) | `https://api.jikan.moe/v4` |
-| `ANIME_PROVIDER_ORDER` | Anime stream provider priority | `hianime,animepahe` |
+| `ANIME_PROVIDER_ORDER` | Anime stream provider priority | `animepahe` |
+| `ANIMEPAHE_BASE` | AnimePahe mirror (rotates: `.si`/`.com`/`.org`) | `https://animepahe.com` |
 
 See `.env.example` for the full annotated set.
 
@@ -191,21 +192,21 @@ titles, studios, MAL-style score, airing status, episode counts), with **Jikan v
 as a fallback. Implemented in `lib/anilist.ts` (types/queries) + `lib/anime-meta.ts`
 (server fetch + 5-min cache + fallback).
 
-### 3. Anime streaming — HiAnime (primary) → AnimePahe (fallback)
+### 3. Anime streaming — AnimePahe (configurable provider)
 
 Episode streams resolve through a **provider abstraction** (`lib/anime-stream.ts`)
 with ordered fallback, matching the architecture used by Tatakai and the wider
-anime-scraper ecosystem:
+anime-scraper ecosystem.
 
-1. **HiAnime** (`lib/providers/hianime.ts`) — backed by the maintained
-   [`aniwatch`](https://github.com/ghoshRitesh12/aniwatch) package (sub + dub),
-   which handles endpoint churn and source decryption for us.
-2. **AnimePahe** (`lib/providers/animepahe.ts`) — independent fallback via
-   [`@consumet/extensions`](https://github.com/consumet/consumet.ts), scraped
-   locally server-side (no hosted API; the old `api.consumet.org` was retired).
-
-If every provider fails, the UI degrades gracefully to a "no source" message.
-Provider order is configurable via `ANIME_PROVIDER_ORDER`.
+> ⚠️ **2026 ecosystem reality:** the free anime scraping ecosystem has largely
+> collapsed — HiAnime and AnimeKai shut down permanently (ACE legal action),
+> the public Consumet API was retired, and AnimePahe sits behind a Cloudflare
+> challenge from datacenter IPs. AniMela ships a clean, extensible provider
+> layer (`lib/providers/animepahe.ts`, via `@consumet/extensions`) whose base
+> domain is configurable via `ANIMEPAHE_BASE` (`.si`/`.com`/`.org` rotate).
+> If every provider fails, the UI degrades gracefully to a "no source" message.
+> Adding a working provider is a one-file change + a registry entry in
+> `ANIME_PROVIDER_ORDER`.
 
 ### 4. Playback — `components/Player.tsx`
 

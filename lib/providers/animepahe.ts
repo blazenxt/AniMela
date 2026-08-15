@@ -1,26 +1,39 @@
 /**
- * AnimePahe provider — independent fallback via `@consumet/extensions`.
+ * AnimePahe provider — via `@consumet/extensions`, with a configurable domain.
  *
- * AnimePahe (animepahe.ru) has been stable for years and is scraped locally by
- * the `@consumet/extensions` library (no hosted API — it runs here, server-side
- * on Railway, which has clean egress). This gives AniMela a genuinely
- * independent second source when HiAnime is down/rotated.
+ * ⚠️ 2026 reality (documented in Anivexa-API and community trackers): the free
+ * anime ecosystem collapsed — HiAnime and AnimeKai shut down permanently
+ * (ACE legal action), the public Consumet API was retired, and AnimePahe is
+ * behind a Cloudflare challenge from datacenter IPs. This provider remains as
+ * the most viable *subbed* source, but its base domain must be configurable
+ * because AnimePahe rotates between official mirrors.
  *
- * Flow:
- *   search(title)            → { results: [{ id (session), title, image }] }
- *   fetchAnimeInfo(session)  → { episodes: [{ id: "session/epSession", number, title }] }
- *   fetchEpisodeSources(id)  → { sources: [{ url, quality, isM3U8 }], subtitles, headers }
+ * Official AnimePahe domains (per the site itself):
+ *   animepahe.si · animepahe.com · animepahe.org
+ *
+ * Configure via `ANIMEPAHE_BASE` (default `https://animepahe.com`), and pick
+ * whichever mirror currently resolves from your host. The scrape itself is
+ * done locally by `@consumet/extensions` (no hosted API), so it runs on
+ * Railway's clean egress — but Cloudflare may still challenge the request.
  */
 
 import { ANIME } from "@consumet/extensions";
 import { AnimeEpisode, AnimeRef, StreamProvider, StreamResult } from "../anime-stream";
 
-const pahe = new ANIME.AnimePahe();
+const BASE = (process.env.ANIMEPAHE_BASE || "https://animepahe.com").replace(/\/+$/, "");
 
-const slugCache = new Map<string, string>();
+class ConfigurableAnimePahe extends ANIME.AnimePahe {
+  constructor() {
+    super();
+    this.baseUrl = BASE;
+  }
+}
+
+const pahe = new ConfigurableAnimePahe();
+
+const sessionCache = new Map<string, string>();
 const norm = (s: string) => (s || "").toLowerCase().replace(/[^a-z0-9]+/g, "");
 
-/** `title` can be a string or `{ romaji, english, native }` object. */
 function titleOf(t: any): string {
   if (typeof t === "string") return t;
   return t?.romaji || t?.english || t?.native || "";
@@ -28,7 +41,7 @@ function titleOf(t: any): string {
 
 async function resolveSession(ref: AnimeRef): Promise<string | null> {
   const cacheKey = `${ref.title}::${ref.year || ""}`;
-  const cached = slugCache.get(cacheKey);
+  const cached = sessionCache.get(cacheKey);
   if (cached) return cached;
 
   const d = await pahe.search(ref.title);
@@ -43,7 +56,7 @@ async function resolveSession(ref: AnimeRef): Promise<string | null> {
       : null) ||
     results[0];
 
-  if (match?.id) slugCache.set(cacheKey, match.id);
+  if (match?.id) sessionCache.set(cacheKey, match.id);
   return match?.id || null;
 }
 
@@ -74,9 +87,9 @@ export const AnimePaheProvider: StreamProvider = {
   async resolveEpisode(
     ref: AnimeRef,
     episode: number,
-    dub: boolean
+    _dub: boolean
   ): Promise<StreamResult | null> {
-    // AnimePahe is sub-first; dub is rarely available, so ignore the flag.
+    // AnimePahe is sub-only; dub is effectively unavailable.
     const session = await resolveSession(ref);
     if (!session) return null;
 
