@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { unshorten } from "@/lib/shortener";
+import { unshorten, extractDecodedUrls } from "@/lib/shortener";
 import { ok, fail, options } from "@/lib/api-response";
 
 export const dynamic = "force-dynamic";
@@ -29,13 +29,12 @@ export async function GET(req: NextRequest) {
       });
       const html = await res.text();
       const urls = [...html.matchAll(/https?:\/\/[^\s"'<>\\]+/gi)].map((m) => m[0]);
-      const scripts = [...html.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/gi)].map((m) => m[1]);
+      const decoded = extractDecodedUrls(html);
       return ok({
         finalUrl: res.url,
         htmlLength: html.length,
-        htmlHead: html.slice(0, 4000),
         urls,
-        scripts: scripts.filter((s) => s.trim()).map((s) => s.slice(0, 1500)),
+        decodedUrls: decoded,
       });
     } catch (e) {
       return fail(502, e instanceof Error ? e.message : "Upstream error");

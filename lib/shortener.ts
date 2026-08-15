@@ -119,6 +119,48 @@ function extractBase64Urls(html: string): string[] {
   return found;
 }
 
+/**
+ * Decode the link-protector's obfuscation cipher (used by mobilejsr and
+ * similar "LinkShrink"-style scripts):
+ *
+ *   decodeURIComponent(s).replace(/@@/g, "@")
+ *     .split("").map((n, r) => {
+ *       const t = n.charCodeAt(0) - 32;
+ *       return t >= 0 && t < 95 ? String.fromCharCode(32 + (t + r) % 95) : n;
+ *     }).join("")
+ */
+export function decodeObfuscated(encoded: string): string {
+  let d: string;
+  try {
+    d = decodeURIComponent(encoded);
+  } catch {
+    d = encoded;
+  }
+  d = d.replace(/@@/g, "@");
+  let out = "";
+  for (let r = 0; r < d.length; r++) {
+    const t = d.charCodeAt(r) - 32;
+    out += t >= 0 && t < 95 ? String.fromCharCode(32 + ((t + r) % 95)) : d[r];
+  }
+  return out;
+}
+
+/**
+ * Extract the raw encoded strings from inline scripts of the form
+ * `decodeURI("...")` / `decodeURIComponent("...")` (the protector's reveal
+ * payload), decode them, and return any URLs inside the decoded output.
+ */
+export function extractDecodedUrls(html: string): string[] {
+  const found: string[] = [];
+  const re = /decodeURI(?:Component)?\s*\(\s*["']([^"']+)["']\s*\)/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(html)) !== null) {
+    const decoded = decodeObfuscated(m[1]);
+    found.push(...extractUrls(decoded));
+  }
+  return found;
+}
+
 export async function unshorten(url: string): Promise<UnshortenResult> {
   const base: UnshortenResult = { ok: false, originalUrl: url, method: "manual" };
 
@@ -156,6 +198,7 @@ export async function unshorten(url: string): Promise<UnshortenResult> {
     const candidates: string[] = [
       ...extractUrls(html),
       ...extractBase64Urls(html),
+      ...extractDecodedUrls(html),
     ];
 
     // meta refresh
