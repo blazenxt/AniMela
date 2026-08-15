@@ -65,6 +65,41 @@ vercel --prod   # production deploy
 
 ---
 
+## Deploy to Railway
+
+The repo ships a `Dockerfile` (Next.js **standalone** output — small, fast, single `node server.js`
+process) plus a `railway.json` with a healthcheck. Railway uses the Dockerfile automatically.
+
+### Option A — Railway dashboard (no PC / phone friendly)
+
+1. Go to [railway.app](https://railway.app) → **Start a New Project** → **Deploy from GitHub repo**.
+2. Pick `blazenxt/AniMela`. Railway auto-detects the `Dockerfile` and builds it.
+3. When it finishes, Railway gives you a `*.up.railway.app` URL (set a custom domain under
+   **Settings → Networking** if you want).
+4. That's it — the app boots on Railway's `PORT` and passes the `/api/health` healthcheck.
+
+### Option B — Railway CLI
+
+```bash
+npm i -g @railway/cli
+railway login
+railway init        # create + link a project
+railway up          # deploy
+railway domain      # generate the public *.up.railway.app URL
+```
+
+### What's in the deploy config
+
+- **`Dockerfile`** — multi-stage build → `next build` (standalone) → tiny Alpine runtime.
+- **`railway.json`** — `healthcheckPath: /api/health`, restart on failure.
+- Railway injects `PORT`/`HOSTNAME` at runtime; the server binds `0.0.0.0:$PORT` automatically.
+
+> **Note:** Railway is a long-running container (not serverless), so the `/api/proxy` fallback
+> works there too if Cinezo ever blocks a direct browser fetch. But as always, playback embeds
+> run in the visitor's browser — hosting location never affects whether video plays.
+
+---
+
 ## The APIs used
 
 ### 1. Metadata & browsing — Cinezo (TMDB proxy)

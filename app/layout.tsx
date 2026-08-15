@@ -8,6 +8,9 @@ export const metadata: Metadata = {
   title: "AniMela — Watch Anime, Movies & Series Free",
   description:
     "Stream anime, movies and TV series in HD for free. Powered by TMDB metadata with instant embeds.",
+  icons: {
+    icon: "/favicon.svg",
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
