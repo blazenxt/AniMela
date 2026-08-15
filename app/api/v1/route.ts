@@ -16,6 +16,8 @@ const ENDPOINTS = [
   { method: "GET", path: "/api/v1/anime/search", desc: "Anime search (AniList)", params: "q, page" },
   { method: "GET", path: "/api/v1/anime/genres", desc: "Anime genre list" },
   { method: "GET", path: "/api/v1/anime/{id}", desc: "Anime details (AniList)" },
+  { method: "GET", path: "/api/v1/anime/{id}/episodes", desc: "Episode list (stream providers)" },
+  { method: "GET", path: "/api/v1/anime/{id}/stream", desc: "Resolve episode stream", params: "ep, dub" },
   { method: "GET", path: "/api/v1/movie/{id}/similar", desc: "Similar movies", params: "page" },
   { method: "GET", path: "/api/v1/tv/{id}/similar", desc: "Similar series", params: "page" },
   { method: "GET", path: "/api/v1/movie/{id}/credits", desc: "Movie cast & crew" },

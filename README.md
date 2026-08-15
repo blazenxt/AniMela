@@ -12,9 +12,9 @@ browse by genre, keep a watchlist, and play instantly. No accounts, no downloads
 
 ## ✨ Features
 
-- **Home** — cinematic featured hero + `Trending Movies`, `Trending Series`, `Popular Anime` rows.
+- **Home** — cinematic featured hero + `Trending Movies`, `Trending Series`, `Trending Anime` rows.
 - **Movies / Series** — paginated grids ("Load more") of weekly trending titles.
-- **Anime** — dedicated anime browser with **Series / Movies** tabs and **Popular / Top Rated** sorting (Japanese animation).
+- **Anime** — dedicated anime browser with **Series / Movies** tabs and **Trending / Popular / Top Rated** sorting, powered by real anime metadata (AniList) — Japanese &amp; English titles, studios, airing status and MAL-style scores. Includes **episode streaming** with **Sub/Dub** support (HiAnime → Consumet fallback).
 - **Genres** — browse movies & series by genre (Movies + Series genre lists).
 - **Search** — live multi-search across movies, series and people.
 - **Movie pages** — backdrop hero, poster, genres, rating, runtime, IMDb link, cast, "More like this", and playback.
@@ -54,6 +54,14 @@ The server binds to `0.0.0.0` so it can be previewed or deployed anywhere.
 | Variable | Purpose | Default |
 | --- | --- | --- |
 | `NEXT_PUBLIC_CINEZO_BASE` | Override the metadata API host if the domain changes | `https://cinezo.org` |
+| `ANILIST_BASE` | AniList GraphQL endpoint | `https://graphql.anilist.co` |
+| `JIKAN_BASE` | Jikan v4 base (metadata fallback) | `https://api.jikan.moe/v4` |
+| `ANIME_PROVIDER_ORDER` | Anime stream provider priority | `hianime,consumet` |
+| `HIANIME_BASE` | HiAnime scraper base host | `https://hianime.to` |
+| `CONSUMET_BASE` | Consumet aggregator instance | `https://api.consumet.org` |
+| `HIANIME_SOURCES_KEY` | Optional AES key for HiAnime's encrypted sources | *(unset — use Consumet fallback)* |
+
+See `.env.example` for the full annotated set.
 
 ---
 
@@ -178,7 +186,29 @@ Posters/backdrops use TMDB's image CDN: `https://image.tmdb.org/t/p/{size}{path}
 3. **Caching** — 5-minute in-memory TTL so back/forward navigation is instant.
 4. **Hard timeouts** — every request aborts fast instead of hanging the page.
 
-### 2. Playback — `components/Player.tsx`
+### 2. Anime metadata — AniList (primary) + Jikan (fallback)
+
+The anime section no longer uses the old TMDB "Animation + Japan" genre filter.
+Real anime metadata comes from **AniList's GraphQL API** (Japanese/English/native
+titles, studios, MAL-style score, airing status, episode counts), with **Jikan v4**
+as a fallback. Implemented in `lib/anilist.ts` (types/queries) + `lib/anime-meta.ts`
+(server fetch + 5-min cache + fallback).
+
+### 3. Anime streaming — HiAnime (primary) → Consumet (fallback)
+
+Episode streams resolve through a **provider abstraction** (`lib/anime-stream.ts`)
+with ordered fallback, matching the architecture used by Tatakai and the wider
+anime-scraper ecosystem:
+
+1. **HiAnime** (`lib/providers/hianime.ts`) — direct scraper for hianime.to
+   (search → episodes → servers → sources), with best-effort AES decryption.
+2. **Consumet** (`lib/providers/consumet.ts`) — hosted aggregator that does the
+   fragile scraping/decryption server-side (zoro/gogoanime/animepahe).
+
+If every provider fails, the UI degrades gracefully to a "no source" message.
+Provider order is configurable via `ANIME_PROVIDER_ORDER`.
+
+### 4. Playback — `components/Player.tsx`
 
 Playback is orchestrated: the player first tries a **direct HD stream** and falls back to an
 **embedded player** if no direct source resolves. A click-to-play overlay prevents the embed's
@@ -194,7 +224,7 @@ first-tap ad/redirect from hijacking the page.
 > WebAssembly decryption core. Its upstream endpoints are subject to change, so the app is built
 > to degrade gracefully to embeds.
 
-### 3. Experimental — SpeedRaceLight (`lib/speedracelight.ts`)
+### 5. Experimental — SpeedRaceLight (`lib/speedracelight.ts`)
 
 An alternative HLS pipeline (seed → encrypted sources → decrypt). Documented but the decryption
 step is a stub pending a byte-exact cipher port. Kept for reference.

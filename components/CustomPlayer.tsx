@@ -10,6 +10,10 @@ export interface Source {
 
 interface Props {
   sources: Source[];
+  /** Extra request headers (e.g. Referer) some anime CDNs require. */
+  headers?: Record<string, string>;
+  /** Optional subtitle tracks (VTT). */
+  subtitles?: { url: string; lang: string }[];
 }
 
 function fmt(t: number): string {
@@ -22,7 +26,7 @@ function fmt(t: number): string {
   return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
 }
 
-export default function CustomPlayer({ sources }: Props) {
+export default function CustomPlayer({ sources, headers, subtitles }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -63,7 +67,15 @@ export default function CustomPlayer({ sources }: Props) {
       }
 
       if (Hls.isSupported()) {
-        const hls = new Hls({ enableWorker: true, lowLatencyMode: false });
+        const hls = new Hls({
+          enableWorker: true,
+          lowLatencyMode: false,
+          xhrSetup: (xhr) => {
+            if (headers) {
+              for (const [k, v] of Object.entries(headers)) xhr.setRequestHeader(k, v);
+            }
+          },
+        });
         hlsRef.current = hls;
         hls.loadSource(url);
         hls.attachMedia(video);
@@ -199,7 +211,11 @@ export default function CustomPlayer({ sources }: Props) {
         playsInline
         onClick={togglePlay}
         className="absolute inset-0 h-full w-full object-contain"
-      />
+      >
+        {subtitles?.map((s, i) => (
+          <track key={i} kind="subtitles" src={s.url} srcLang={s.lang} label={s.lang} />
+        ))}
+      </video>
 
       {/* big center play button — only shown while paused */}
       {!playing && !buffering && (

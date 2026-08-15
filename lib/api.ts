@@ -132,6 +132,22 @@ export interface AnimePage {
   results: AnimeItem[];
 }
 
+/** Lightweight episode shape (mirrors lib/anime-stream.ts, client-safe). */
+export interface AnimeEpisode {
+  id: string;
+  number: number;
+  title?: string;
+  image?: string;
+  isFiller?: boolean;
+}
+
+/** Lightweight stream source shape (client-safe). */
+export interface AnimeStreamSource {
+  url: string;
+  quality: string;
+  isM3U8: boolean;
+}
+
 export const api = {
   trendingMovies: (page = 1) => request(`${BASE}/api/tmdb/trending/movie/week?page=${page}`),
   trendingTv: (page = 1) => request(`${BASE}/api/tmdb/trending/tv/week?page=${page}`),
@@ -170,4 +186,12 @@ export const api = {
   animeDetail: (id: number | string): Promise<AnimeItem> =>
     fetchV1<AnimeItem>(`/anime/${id}`),
   animeGenres: (): Promise<{ genres: string[] }> => fetchV1(`/anime/genres`),
+  animeEpisodes: (id: number | string): Promise<{ available: boolean; episodes: AnimeEpisode[] }> =>
+    fetchV1(`/anime/${id}/episodes`),
+  animeStream: (
+    id: number | string,
+    episode: number,
+    dub = false
+  ): Promise<{ available: boolean; sources?: AnimeStreamSource[]; subtitles?: { url: string; lang: string }[]; headers?: Record<string, string> } & Record<string, unknown>> =>
+    fetchV1(`/anime/${id}/stream?ep=${episode}&dub=${dub ? 1 : 0}`),
 };

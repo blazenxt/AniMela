@@ -5,6 +5,7 @@ import { api } from "@/lib/api";
 import { useApi } from "@/lib/useApi";
 import Loading from "@/components/Loading";
 import ErrorState from "@/components/ErrorState";
+import AnimePlayer from "@/components/AnimePlayer";
 import { formatLabel, statusLabel, stripHtml } from "@/lib/anilist";
 import { ExternalLinkIcon, StarIcon } from "@/components/Icons";
 
@@ -82,18 +83,7 @@ export default function AnimePage({ params }: { params: Promise<{ id: string }> 
 
         <div className="mt-8 grid gap-8 lg:grid-cols-[1fr_340px]">
           <div>
-            {/* Placeholder — Phase 2 wires the AniList→HiAnime/Consumet resolver. */}
-            <div
-              className="relative flex w-full items-center justify-center overflow-hidden rounded-2xl bg-black ring-1 ring-white/10"
-              style={{ aspectRatio: "16 / 9" }}
-            >
-              <div className="px-6 text-center">
-                <p className="font-semibold text-zinc-200">Playback coming soon</p>
-                <p className="mt-1 text-sm text-zinc-500">
-                  Episode streaming (HiAnime / Consumet) lands in the next phase.
-                </p>
-              </div>
-            </div>
+            <AnimePlayer anilistId={data.id} title={data.title} />
 
             {synopsis && (
               <div className="mt-6">
