@@ -58,6 +58,8 @@ The server binds to `0.0.0.0` so it can be previewed or deployed anywhere.
 | `JIKAN_BASE` | Jikan v4 base (metadata fallback) | `https://api.jikan.moe/v4` |
 | `ANIME_PROVIDER_ORDER` | Anime stream provider priority | `animepahe` |
 | `ANIMEPAHE_BASE` | AnimePahe mirror (rotates: `.si`/`.com`/`.org`) | `https://animepahe.com` |
+| `MOVIE_PROVIDER_ORDER` | Hindi/Desi movie source priority | `sevenhitmovies` |
+| `SEVENHITMOVIES_BASE` | SevenHitMovies domain (rotates) | `https://7hitmovies.net` |
 
 See `.env.example` for the full annotated set.
 
@@ -208,7 +210,25 @@ anime-scraper ecosystem.
 > Adding a working provider is a one-file change + a registry entry in
 > `ANIME_PROVIDER_ORDER`.
 
-### 4. Playback — `components/Player.tsx`
+### 4. Hindi / Desi movies — download-oriented sources
+
+A **"Hindi Movies"** section (`/hindi`) surfaces Hindi-dubbed, Bollywood and
+regional movies from download-oriented sites (TheMoviesFlix, Vegamovies,
+KatmovieHD, 7HitMovies style). These sites expose **metadata + download links**
+(Google Drive / GDToT behind a shortener), not HLS streams — so AniMela shows
+them as "Download / Watch" buttons that open in a new tab rather than feeding
+the HTML5 player.
+
+Implemented via a `MovieSourceProvider` abstraction (`lib/movie-sources.ts`),
+mirroring the anime provider layer. The first provider (`lib/providers/sevenhitmovies.ts`)
+uses 7HitMovies' **WordPress REST API** (`/wp-json/wp/v2/posts`) for clean JSON
+— no fragile HTML scraping. Its domain is configurable via `SEVENHITMOVIES_BASE`.
+
+> ⚠️ These sites rotate domains constantly and are behind Cloudflare +
+> link-shortener ad layers; datacenter IPs (Railway/Vercel) are frequently
+> challenged. Provider order is configurable via `MOVIE_PROVIDER_ORDER`.
+
+### 5. Playback — `components/Player.tsx`
 
 Playback is orchestrated: the player first tries a **direct HD stream** and falls back to an
 **embedded player** if no direct source resolves. A click-to-play overlay prevents the embed's
@@ -224,7 +244,7 @@ first-tap ad/redirect from hijacking the page.
 > WebAssembly decryption core. Its upstream endpoints are subject to change, so the app is built
 > to degrade gracefully to embeds.
 
-### 5. Experimental — SpeedRaceLight (`lib/speedracelight.ts`)
+### 6. Experimental — SpeedRaceLight (`lib/speedracelight.ts`)
 
 An alternative HLS pipeline (seed → encrypted sources → decrypt). Documented but the decryption
 step is a stub pending a byte-exact cipher port. Kept for reference.

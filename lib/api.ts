@@ -148,6 +148,32 @@ export interface AnimeStreamSource {
   isM3U8: boolean;
 }
 
+/** Desi/Hindi movie item (from download-oriented providers). */
+export interface HindiMovieItem {
+  provider: string;
+  id: string;
+  title: string;
+  slug?: string;
+  link: string;
+  image?: string;
+  date?: string;
+}
+
+/** Desi/Hindi movie detail + download links. */
+export interface HindiMovieDetail {
+  provider: string;
+  id: string;
+  title: string;
+  slug?: string;
+  link: string;
+  image?: string;
+  date?: string;
+  year?: string;
+  rating?: string;
+  plot?: string;
+  links: { label: string; url: string }[];
+}
+
 export const api = {
   trendingMovies: (page = 1) => request(`${BASE}/api/tmdb/trending/movie/week?page=${page}`),
   trendingTv: (page = 1) => request(`${BASE}/api/tmdb/trending/tv/week?page=${page}`),
@@ -194,4 +220,12 @@ export const api = {
     dub = false
   ): Promise<{ available: boolean; sources?: AnimeStreamSource[]; subtitles?: { url: string; lang: string }[]; headers?: Record<string, string> } & Record<string, unknown>> =>
     fetchV1(`/anime/${id}/stream?ep=${episode}&dub=${dub ? 1 : 0}`),
+
+  // ── Hindi / Desi movies (download-oriented providers) ─────────────────
+  hindiSearch: (query: string, page = 1): Promise<{ results: HindiMovieItem[] }> =>
+    fetchV1(`/hindi/search?q=${encodeURIComponent(query)}&page=${page}`),
+  hindiRecent: (page = 1): Promise<{ results: HindiMovieItem[] }> =>
+    fetchV1(`/hindi/recent?page=${page}`),
+  hindiDetail: (provider: string, id: string): Promise<HindiMovieDetail> =>
+    fetchV1(`/hindi/${provider}/${id}`),
 };
