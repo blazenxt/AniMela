@@ -13,6 +13,7 @@ function Results() {
     <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6">
       <h1 className="mb-6 text-3xl font-black text-white">Results for “{q}”</h1>
       <MediaGrid
+        key={q}
         emptyLabel={`No results for "${q}".`}
         fetchPage={async (p) => {
           const d = await api.search(q, p);

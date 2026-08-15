@@ -14,6 +14,7 @@ function GenreResults({ kind, id }: { kind: Kind; id: string }) {
       <h1 className="mb-2 text-3xl font-black text-white capitalize">{name}</h1>
       <p className="mb-6 text-sm text-zinc-500">{kind === "movie" ? "Movies" : "Series"} in this genre.</p>
       <MediaGrid
+        key={`${kind}-${id}`}
         emptyLabel={`No ${kind === "movie" ? "movies" : "series"} found in this genre.`}
         fetchPage={(p) => api.discover(kind, id, p)}
       />
