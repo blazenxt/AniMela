@@ -56,10 +56,7 @@ The server binds to `0.0.0.0` so it can be previewed or deployed anywhere.
 | `NEXT_PUBLIC_CINEZO_BASE` | Override the metadata API host if the domain changes | `https://cinezo.org` |
 | `ANILIST_BASE` | AniList GraphQL endpoint | `https://graphql.anilist.co` |
 | `JIKAN_BASE` | Jikan v4 base (metadata fallback) | `https://api.jikan.moe/v4` |
-| `ANIME_PROVIDER_ORDER` | Anime stream provider priority | `hianime,consumet` |
-| `HIANIME_BASE` | HiAnime scraper base host | `https://hianime.to` |
-| `CONSUMET_BASE` | Consumet aggregator instance | `https://api.consumet.org` |
-| `HIANIME_SOURCES_KEY` | Optional AES key for HiAnime's encrypted sources | *(unset — use Consumet fallback)* |
+| `ANIME_PROVIDER_ORDER` | Anime stream provider priority | `hianime,animepahe` |
 
 See `.env.example` for the full annotated set.
 
@@ -194,16 +191,18 @@ titles, studios, MAL-style score, airing status, episode counts), with **Jikan v
 as a fallback. Implemented in `lib/anilist.ts` (types/queries) + `lib/anime-meta.ts`
 (server fetch + 5-min cache + fallback).
 
-### 3. Anime streaming — HiAnime (primary) → Consumet (fallback)
+### 3. Anime streaming — HiAnime (primary) → AnimePahe (fallback)
 
 Episode streams resolve through a **provider abstraction** (`lib/anime-stream.ts`)
 with ordered fallback, matching the architecture used by Tatakai and the wider
 anime-scraper ecosystem:
 
-1. **HiAnime** (`lib/providers/hianime.ts`) — direct scraper for hianime.to
-   (search → episodes → servers → sources), with best-effort AES decryption.
-2. **Consumet** (`lib/providers/consumet.ts`) — hosted aggregator that does the
-   fragile scraping/decryption server-side (zoro/gogoanime/animepahe).
+1. **HiAnime** (`lib/providers/hianime.ts`) — backed by the maintained
+   [`aniwatch`](https://github.com/ghoshRitesh12/aniwatch) package (sub + dub),
+   which handles endpoint churn and source decryption for us.
+2. **AnimePahe** (`lib/providers/animepahe.ts`) — independent fallback via
+   [`@consumet/extensions`](https://github.com/consumet/consumet.ts), scraped
+   locally server-side (no hosted API; the old `api.consumet.org` was retired).
 
 If every provider fails, the UI degrades gracefully to a "no source" message.
 Provider order is configurable via `ANIME_PROVIDER_ORDER`.
