@@ -157,9 +157,10 @@ export async function resolveEpisode(
 
 /** Free-text search across providers (first provider that returns results). */
 export async function searchAnime(query: string): Promise<AnimeRef[]> {
+  const errors: ProviderError[] = [];
   for (const p of providerList()) {
     if (!healthy(p)) continue;
-    const results = await attempt(p, () => p.searchAnime(query));
+    const results = await attempt(p, () => p.searchAnime(query), errors);
     if (results && results.length) return results;
   }
   return [];
