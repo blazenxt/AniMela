@@ -61,6 +61,22 @@ The server binds to `0.0.0.0` so it can be previewed or deployed anywhere.
 | `MOVIE_PROVIDER_ORDER` | Hindi/Desi movie source priority | `sevenhitmovies` |
 | `SEVENHITMOVIES_BASE` | SevenHitMovies domain (rotates) | `https://7hitmovies.net` |
 
+### Link shortener bypass
+
+The Hindi movie sources wrap their real download links in link-protector pages
+(e.g. `mobilejsr.com/view/…`). `/api/v1/unshorten?url=…` resolves these
+server-side and returns the direct link when possible:
+
+- **`redirect`** — plain redirect shortener (e.g. `is.gd`) → direct URL returned.
+- **`embedded`** — the target URL is embedded in the page (plain links, base64,
+  or the protector's character-shift cipher) → decoded and returned.
+- **`manual`** — captcha-gated protectors (mobilejsr's "three step auth" +
+  Google reCAPTCHA). These cannot be auto-bypassed without a paid captcha
+  solver, so the UI falls back to opening the original link.
+
+The movie detail page has a **"resolve"** button per link that calls this
+endpoint and swaps in the direct link when it succeeds.
+
 See `.env.example` for the full annotated set.
 
 ---

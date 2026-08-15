@@ -171,6 +171,22 @@ export function extractDecodedTexts(html: string): string[] {
   return out;
 }
 
+/** Reject obvious SSRF targets (localhost / private / link-local / metadata). */
+function isPrivateHost(hostname: string): boolean {
+  const h = hostname.toLowerCase();
+  if (h === "localhost" || h === "metadata.google.internal" || h.endsWith(".internal")) return true;
+  if (h === "::1" || h === "0.0.0.0") return true;
+  const ipv4 = h.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (ipv4) {
+    const [a, b] = [Number(ipv4[1]), Number(ipv4[2])];
+    if (a === 127 || a === 10 || a === 0) return true;
+    if (a === 172 && b >= 16 && b <= 31) return true;
+    if (a === 192 && b === 168) return true;
+    if (a === 169 && b === 254) return true;
+  }
+  return false;
+}
+
 export async function unshorten(url: string): Promise<UnshortenResult> {
   const base: UnshortenResult = { ok: false, originalUrl: url, method: "manual" };
 
@@ -182,6 +198,9 @@ export async function unshorten(url: string): Promise<UnshortenResult> {
   }
   if (target.protocol !== "https:" && target.protocol !== "http:") {
     return { ...base, note: "bad protocol" };
+  }
+  if (isPrivateHost(target.hostname)) {
+    return { ...base, note: "host not allowed" };
   }
 
   const originalHost = extractHost(url);

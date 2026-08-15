@@ -228,4 +228,8 @@ export const api = {
     fetchV1(`/hindi/recent?page=${page}`),
   hindiDetail: (provider: string, id: string): Promise<HindiMovieDetail> =>
     fetchV1(`/hindi/${provider}/${id}`),
+  unshorten: (
+    url: string
+  ): Promise<{ ok: boolean; originalUrl: string; resolvedUrl?: string; host?: string; method: "redirect" | "embedded" | "manual"; note?: string }> =>
+    fetchV1(`/unshorten?url=${encodeURIComponent(url)}`),
 };

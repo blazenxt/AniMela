@@ -1,12 +1,62 @@
 "use client";
 
-import { use, useEffect } from "react";
+import { use, useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { useApi } from "@/lib/useApi";
 import Loading from "@/components/Loading";
 import ErrorState from "@/components/ErrorState";
 import { ExternalLinkIcon, StarIcon } from "@/components/Icons";
 import { PLACEHOLDER } from "@/lib/images";
+
+function ResolveButton({ url, label }: { url: string; label: string }) {
+  const [resolved, setResolved] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+
+  const resolve = async () => {
+    setBusy(true);
+    setNote(null);
+    try {
+      const d = await api.unshorten(url);
+      if (d.ok && d.resolvedUrl) {
+        setResolved(d.resolvedUrl);
+        setNote(d.method === "redirect" ? "direct link" : "resolved");
+      } else {
+        setNote(d.note || "protected link (captcha)");
+      }
+    } catch {
+      setNote("could not resolve");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const href = resolved || url;
+
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <a
+        href={href}
+        target="_blank"
+        rel="noreferrer nofollow"
+        className="inline-flex items-center gap-2 rounded-xl bg-white/5 px-4 py-2.5 text-sm font-semibold text-white ring-1 ring-white/10 transition hover:bg-white/10"
+      >
+        {label}
+        {resolved && <span className="text-xs text-emerald-300">✓</span>}
+        <ExternalLinkIcon className="h-4 w-4 text-zinc-400" />
+      </a>
+      <button
+        onClick={resolve}
+        disabled={busy}
+        title="Resolve the shortener server-side to get the direct link"
+        className="rounded-lg px-2 py-2 text-xs font-semibold text-violet-300 ring-1 ring-violet-400/30 transition hover:bg-violet-400/10 disabled:opacity-50"
+      >
+        {busy ? "…" : resolved ? "re-resolve" : "resolve"}
+      </button>
+      {note && <span className="text-xs text-zinc-500">{note}</span>}
+    </span>
+  );
+}
 
 export default function HindiMoviePage({
   params,
@@ -65,20 +115,13 @@ export default function HindiMoviePage({
               </h2>
               <p className="mb-3 text-xs text-zinc-500">
                 These are third-party download links (Google Drive / GDToT behind a shortener).
-                They open in a new tab — they are not in-app streams.
+                Tap <span className="font-semibold text-violet-300">resolve</span> to try to get the
+                direct link server-side (captcha-protected links will fall back to opening the
+                original page).
               </p>
               <div className="flex flex-wrap gap-2">
                 {data.links.map((l, i) => (
-                  <a
-                    key={i}
-                    href={l.url}
-                    target="_blank"
-                    rel="noreferrer nofollow"
-                    className="inline-flex items-center gap-2 rounded-xl bg-white/5 px-4 py-2.5 text-sm font-semibold text-white ring-1 ring-white/10 transition hover:bg-white/10"
-                  >
-                    {l.label}
-                    <ExternalLinkIcon className="h-4 w-4 text-zinc-400" />
-                  </a>
+                  <ResolveButton key={i} url={l.url} label={l.label} />
                 ))}
               </div>
             </div>
