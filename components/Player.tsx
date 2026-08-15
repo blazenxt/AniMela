@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { ExternalLinkIcon } from "@/components/Icons";
 
 export interface PlayerSource {
   label: string;
@@ -48,7 +49,8 @@ export default function Player({ sources }: { sources: PlayerSource[] }) {
           rel="noreferrer"
           className="mt-3 inline-flex items-center gap-1.5 text-sm text-purple-300 transition hover:text-purple-200"
         >
-          Having trouble playing? Open in a new tab ↗
+          Having trouble playing? Open in a new tab
+          <ExternalLinkIcon className="h-4 w-4" />
         </a>
       )}
     </div>

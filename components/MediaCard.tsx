@@ -4,6 +4,7 @@ import Link from "next/link";
 import { itemTitle, itemType, itemYear, MediaItem } from "@/lib/types";
 import { poster } from "@/lib/images";
 import { useLibrary, Kind } from "@/lib/library";
+import { HeartIcon, PlayIcon, StarIcon } from "@/components/Icons";
 
 export default function MediaCard({ item }: { item: MediaItem }) {
   const type = itemType(item);
@@ -34,14 +35,16 @@ export default function MediaCard({ item }: { item: MediaItem }) {
           </span>
 
           {typeof rating === "number" && rating > 0 && (
-            <span className="absolute right-2 top-2 rounded bg-yellow-400/90 px-1.5 py-0.5 text-[11px] font-bold text-black">
-              ★ {rating.toFixed(1)}
+            <span className="absolute right-2 top-2 inline-flex items-center gap-1 rounded bg-yellow-400/90 px-1.5 py-0.5 text-[11px] font-bold text-black">
+              <StarIcon className="h-3 w-3" />
+              {rating.toFixed(1)}
             </span>
           )}
 
           <div className="absolute inset-x-0 bottom-0 translate-y-2 p-2 opacity-0 transition group-hover:translate-y-0 group-hover:opacity-100">
-            <span className="block w-full rounded-lg bg-purple-600 py-1.5 text-center text-xs font-bold text-white">
-              ▶ Play
+            <span className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-purple-600 py-1.5 text-center text-xs font-bold text-white">
+              <PlayIcon className="h-3.5 w-3.5" />
+              Play
             </span>
           </div>
         </Link>
@@ -56,15 +59,10 @@ export default function MediaCard({ item }: { item: MediaItem }) {
           title={watched ? "Remove from My List" : "Add to My List"}
           className="absolute bottom-2 right-2 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-black/60 backdrop-blur transition hover:bg-black/80"
         >
-          <svg
-            viewBox="0 0 24 24"
-            className={`h-4 w-4 transition ${watched ? "fill-rose-500 stroke-rose-500" : "fill-none stroke-white"}`}
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" />
-          </svg>
+          <HeartIcon
+            filled={watched}
+            className={`h-4 w-4 transition ${watched ? "text-rose-500" : "text-white"}`}
+          />
         </button>
       </div>
 

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useLibrary, WatchItem, ContinueItem } from "@/lib/library";
 import { poster } from "@/lib/images";
+import { HeartIcon, XIcon } from "@/components/Icons";
 
 function WatchCard({ item }: { item: WatchItem }) {
   const href = item.type === "movie" ? `/movie/${item.id}` : `/tv/${item.id}`;
@@ -51,7 +52,7 @@ function ContinueCard({ item, onRemove }: { item: ContinueItem; onRemove: (id: n
         aria-label="Remove from continue watching"
         className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-black/60 text-zinc-300 opacity-0 backdrop-blur transition hover:text-white group-hover:opacity-100"
       >
-        ✕
+        <XIcon className="h-3.5 w-3.5" />
       </button>
     </div>
   );
@@ -94,8 +95,10 @@ export default function MyListPage() {
           <h2 className="text-xl font-bold text-white">Watchlist</h2>
         </div>
         {watchlist.length === 0 ? (
-          <p className="py-6 text-zinc-500">
-            Your watchlist is empty. Tap the ♥ on any title to save it here.
+          <p className="flex items-center gap-2 py-6 text-zinc-500">
+            Your watchlist is empty. Tap the
+            <HeartIcon className="h-4 w-4 text-rose-400" />
+            on any title to save it here.
           </p>
         ) : (
           <div className="flex gap-4 overflow-x-auto pb-2 no-scrollbar">

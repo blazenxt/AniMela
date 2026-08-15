@@ -9,6 +9,7 @@ import MediaRow from "@/components/MediaRow";
 import Loading from "@/components/Loading";
 import { MediaItem, itemTitle } from "@/lib/types";
 import { backdrop, poster } from "@/lib/images";
+import { PlayIcon, SparklesIcon } from "@/components/Icons";
 
 export default function Home() {
   const movies = useApi(() => api.trendingMovies(1), []);
@@ -46,7 +47,8 @@ export default function Home() {
 
           <div className="relative z-10 mx-auto flex h-full max-w-7xl flex-col justify-end px-4 pb-16 sm:px-6">
             <span className="mb-3 inline-flex w-fit items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-white backdrop-blur">
-              ★ Featured
+              <SparklesIcon className="h-3.5 w-3.5 text-amber-400" />
+              Featured
             </span>
             <h1 className="text-4xl font-black text-white drop-shadow-lg sm:text-6xl">
               {itemTitle(hero)}
@@ -59,7 +61,8 @@ export default function Home() {
                 href={heroType === "tv" ? `/tv/${hero.id}` : `/movie/${hero.id}`}
                 className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-fuchsia-500 to-purple-600 px-6 py-3 font-bold text-white shadow-lg shadow-purple-900/40 transition hover:opacity-90"
               >
-                ▶ Watch now
+                <PlayIcon className="h-5 w-5" />
+                Watch now
               </Link>
             </div>
           </div>

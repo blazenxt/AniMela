@@ -11,6 +11,7 @@ import CastList from "@/components/CastList";
 import SimilarRow from "@/components/SimilarRow";
 import { backdrop, poster } from "@/lib/images";
 import { videasyMovie, vidfastMovie } from "@/lib/players";
+import { ExternalLinkIcon, HeartIcon, StarIcon } from "@/components/Icons";
 
 export default function MoviePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -71,7 +72,11 @@ export default function MoviePage({ params }: { params: Promise<{ id: string }> 
             <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-zinc-400">
               {year && <span>{year}</span>}
               {data.runtime && <span>• {data.runtime} min</span>}
-              {rating !== null && <span>• ★ {rating.toFixed(1)}</span>}
+              {rating !== null && (
+                <span className="inline-flex items-center gap-1">
+                  • <StarIcon className="h-3.5 w-3.5 text-yellow-400" /> {rating.toFixed(1)}
+                </span>
+              )}
               {data.status && <span>• {data.status}</span>}
             </div>
             {genres.length > 0 && (
@@ -96,7 +101,8 @@ export default function MoviePage({ params }: { params: Promise<{ id: string }> 
                 watched ? "bg-rose-500/20 text-rose-300 ring-1 ring-rose-500/40" : "bg-white/10 text-white hover:bg-white/15"
               }`}
             >
-              <span>{watched ? "♥" : "♡"}</span> {watched ? "In My List" : "Add to My List"}
+              <HeartIcon filled={watched} className="h-4 w-4" />
+              {watched ? "In My List" : "Add to My List"}
             </button>
           </div>
         </div>
@@ -138,9 +144,10 @@ export default function MoviePage({ params }: { params: Promise<{ id: string }> 
                 href={`https://www.imdb.com/title/${data.imdb_id}/`}
                 target="_blank"
                 rel="noreferrer"
-                className="block rounded-xl bg-yellow-400/10 p-4 font-semibold text-yellow-300 ring-1 ring-yellow-400/20 transition hover:bg-yellow-400/20"
+                className="flex items-center justify-between rounded-xl bg-yellow-400/10 p-4 font-semibold text-yellow-300 ring-1 ring-yellow-400/20 transition hover:bg-yellow-400/20"
               >
-                IMDb ↗
+                IMDb
+                <ExternalLinkIcon className="h-4 w-4" />
               </a>
             )}
           </aside>

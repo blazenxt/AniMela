@@ -13,6 +13,7 @@ import CastList from "@/components/CastList";
 import SimilarRow from "@/components/SimilarRow";
 import { backdrop, poster } from "@/lib/images";
 import { videasyTv } from "@/lib/players";
+import { HeartIcon, StarIcon } from "@/components/Icons";
 
 export default function TvPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -103,7 +104,11 @@ export default function TvPage({ params }: { params: Promise<{ id: string }> }) 
                 {data.number_of_seasons !== 1 ? "s" : ""}
               </span>
               {data.number_of_episodes && <span>• {data.number_of_episodes} eps</span>}
-              {rating !== null && <span>• ★ {rating.toFixed(1)}</span>}
+              {rating !== null && (
+                <span className="inline-flex items-center gap-1">
+                  • <StarIcon className="h-3.5 w-3.5 text-yellow-400" /> {rating.toFixed(1)}
+                </span>
+              )}
             </div>
             {genres.length > 0 && (
               <div className="mt-3 flex flex-wrap gap-2">
@@ -127,7 +132,8 @@ export default function TvPage({ params }: { params: Promise<{ id: string }> }) 
                 watched ? "bg-rose-500/20 text-rose-300 ring-1 ring-rose-500/40" : "bg-white/10 text-white hover:bg-white/15"
               }`}
             >
-              <span>{watched ? "♥" : "♡"}</span> {watched ? "In My List" : "Add to My List"}
+              <HeartIcon filled={watched} className="h-4 w-4" />
+              {watched ? "In My List" : "Add to My List"}
             </button>
           </div>
         </div>
