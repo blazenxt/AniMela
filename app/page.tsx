@@ -35,7 +35,7 @@ export default function Home() {
   return (
     <div>
       {hero && (
-        <div className="relative h-[68vh] min-h-[420px] w-full overflow-hidden">
+        <div className="relative h-[60vh] min-h-[340px] w-full overflow-hidden sm:h-[68vh] sm:min-h-[420px]">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={backdrop(hero.backdrop_path, "w1280")}

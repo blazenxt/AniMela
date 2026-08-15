@@ -165,8 +165,8 @@ export default function MoviePage({ params }: { params: Promise<{ id: string }> 
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between gap-4">
-      <dt className="text-zinc-500">{label}</dt>
-      <dd className="text-right text-zinc-300">{value}</dd>
+      <dt className="shrink-0 text-zinc-500">{label}</dt>
+      <dd className="min-w-0 break-words text-right text-zinc-300">{value}</dd>
     </div>
   );
 }
