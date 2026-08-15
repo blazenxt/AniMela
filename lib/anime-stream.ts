@@ -86,7 +86,17 @@ function healthy(p: StreamProvider): boolean {
   return Date.now() > until;
 }
 
-async function attempt<T>(p: StreamProvider, fn: () => Promise<T | null>): Promise<T | null> {
+/** Per-provider failure details (surfaced in API responses for debugging). */
+export interface ProviderError {
+  provider: string;
+  error: string;
+}
+
+async function attempt<T>(
+  p: StreamProvider,
+  fn: () => Promise<T | null>,
+  errors: ProviderError[]
+): Promise<T | null> {
   try {
     const result = await fn();
     if (result) {
@@ -94,21 +104,37 @@ async function attempt<T>(p: StreamProvider, fn: () => Promise<T | null>): Promi
       return result;
     }
     cooldown.set(p.id, Date.now() + FAIL_COOLDOWN_MS);
+    errors.push({ provider: p.id, error: "no result" });
     return null;
-  } catch {
+  } catch (e) {
     cooldown.set(p.id, Date.now() + FAIL_COOLDOWN_MS);
+    errors.push({ provider: p.id, error: e instanceof Error ? e.message : String(e) });
     return null;
   }
 }
 
+export interface EpisodeListResult {
+  episodes: AnimeEpisode[] | null;
+  errors: ProviderError[];
+}
+
 /** Resolve the episode list, trying providers in order until one succeeds. */
-export async function listEpisodes(ref: AnimeRef): Promise<AnimeEpisode[] | null> {
+export async function listEpisodes(ref: AnimeRef): Promise<EpisodeListResult> {
+  const errors: ProviderError[] = [];
   for (const p of providerList()) {
-    if (!healthy(p)) continue;
-    const eps = await attempt(p, () => p.listEpisodes(ref));
-    if (eps && eps.length) return eps;
+    if (!healthy(p)) {
+      errors.push({ provider: p.id, error: "cooling down" });
+      continue;
+    }
+    const eps = await attempt(p, () => p.listEpisodes(ref), errors);
+    if (eps && eps.length) return { episodes: eps, errors };
   }
-  return null;
+  return { episodes: null, errors };
+}
+
+export interface StreamResolution {
+  result: StreamResult | null;
+  errors: ProviderError[];
 }
 
 /** Resolve a playable stream for a single episode, with fallback. */
@@ -116,13 +142,17 @@ export async function resolveEpisode(
   ref: AnimeRef,
   episode: number,
   dub = false
-): Promise<StreamResult | null> {
+): Promise<StreamResolution> {
+  const errors: ProviderError[] = [];
   for (const p of providerList()) {
-    if (!healthy(p)) continue;
-    const result = await attempt(p, () => p.resolveEpisode(ref, episode, dub));
-    if (result && result.sources.length) return result;
+    if (!healthy(p)) {
+      errors.push({ provider: p.id, error: "cooling down" });
+      continue;
+    }
+    const result = await attempt(p, () => p.resolveEpisode(ref, episode, dub), errors);
+    if (result && result.sources.length) return { result, errors };
   }
-  return null;
+  return { result: null, errors };
 }
 
 /** Free-text search across providers (first provider that returns results). */

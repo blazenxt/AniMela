@@ -21,7 +21,7 @@ export async function GET(
     const detail = await animeDetail(id);
     if (!detail) return fail(404, "Anime not found");
 
-    const eps = await listEpisodes({
+    const { episodes, errors } = await listEpisodes({
       anilistId: detail.id,
       malId: detail.malId ?? undefined,
       title: detail.title,
@@ -29,10 +29,10 @@ export async function GET(
       format: detail.format ?? undefined,
     });
 
-    if (!eps || !eps.length) {
-      return ok({ available: false, episodes: [] });
+    if (!episodes || !episodes.length) {
+      return ok({ available: false, episodes: [], errors });
     }
-    return ok({ available: true, episodes: eps });
+    return ok({ available: true, episodes, errors });
   } catch (e) {
     return fail(502, e instanceof Error ? e.message : "Upstream error");
   }

@@ -32,7 +32,7 @@ export async function GET(
     const detail = await animeDetail(id);
     if (!detail) return fail(404, "Anime not found");
 
-    const result = await resolveEpisode(
+    const { result, errors } = await resolveEpisode(
       {
         anilistId: detail.id,
         malId: detail.malId ?? undefined,
@@ -45,9 +45,9 @@ export async function GET(
     );
 
     if (!result) {
-      return ok({ available: false, reason: "No playable source found" });
+      return ok({ available: false, reason: "No playable source found", errors });
     }
-    return ok({ available: true, ...result });
+    return ok({ available: true, ...result, errors });
   } catch (e) {
     return fail(502, e instanceof Error ? e.message : "Upstream error");
   }
