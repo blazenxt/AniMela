@@ -14,8 +14,33 @@ export const maxDuration = 30;
  * caller should show the original link).
  */
 export async function GET(req: NextRequest) {
-  const url = req.nextUrl.searchParams.get("url");
+  const sp = req.nextUrl.searchParams;
+  const url = sp.get("url");
   if (!url) return fail(400, "Missing required param: url");
+
+  // Debug mode: dump raw HTML (truncated) + all extracted candidates so we can
+  // reverse-engineer a protector's actual reveal mechanism. Dev only.
+  if (sp.get("debug") === "1") {
+    try {
+      const res = await fetch(url, {
+        headers: { "User-Agent": "Mozilla/5.0 Chrome/126.0" },
+        signal: AbortSignal.timeout(10000),
+        redirect: "follow",
+      });
+      const html = await res.text();
+      const urls = [...html.matchAll(/https?:\/\/[^\s"'<>\\]+/gi)].map((m) => m[0]);
+      const scripts = [...html.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/gi)].map((m) => m[1]);
+      return ok({
+        finalUrl: res.url,
+        htmlLength: html.length,
+        htmlHead: html.slice(0, 4000),
+        urls,
+        scripts: scripts.filter((s) => s.trim()).map((s) => s.slice(0, 1500)),
+      });
+    } catch (e) {
+      return fail(502, e instanceof Error ? e.message : "Upstream error");
+    }
+  }
 
   try {
     const result = await unshorten(url);
