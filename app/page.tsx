@@ -14,7 +14,7 @@ import { PlayIcon, SparklesIcon } from "@/components/Icons";
 export default function Home() {
   const movies = useApi(() => api.trendingMovies(1), []);
   const series = useApi(() => api.trendingTv(1), []);
-  const anime = useApi(() => api.search("anime", 1), []);
+  const anime = useApi(() => api.animeSeries(1, "popularity"), []);
   const { watchlist, continueWatching } = useLibrary();
 
   const hero: MediaItem | undefined = useMemo(() => {
@@ -29,7 +29,6 @@ export default function Home() {
         .slice(0, 20),
     [anime.data]
   );
-
   const heroType = hero?.media_type || (hero?.title ? "movie" : "tv");
 
   return (

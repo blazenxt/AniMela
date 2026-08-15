@@ -126,4 +126,19 @@ export const api = {
   similar: (kind: Kind, id: number | string, page = 1) =>
     request(`${BASE}/api/tmdb/${kind}/${id}/similar?page=${page}`),
   credits: (kind: Kind, id: number | string) => request(`${BASE}/api/tmdb/${kind}/${id}/credits`),
+  topRatedTv: (page = 1) => request(`${BASE}/api/tmdb/tv/top_rated?page=${page}`),
+  topRatedMovies: (page = 1) => request(`${BASE}/api/tmdb/movie/top_rated?page=${page}`),
+  // Anime (Animation genre 16, Japanese origin) — see app/anime/page.tsx
+  animeSeries: (page = 1, sort: "popularity" | "rating" = "popularity") =>
+    request(
+      `${BASE}/api/tmdb/discover/tv?with_genres=16&with_origin_country=JP&sort_by=${
+        sort === "rating" ? "vote_average.desc" : "popularity.desc"
+      }&include_adult=false&page=${page}`
+    ),
+  animeMovies: (page = 1, sort: "popularity" | "rating" = "popularity") =>
+    request(
+      `${BASE}/api/tmdb/discover/movie?with_genres=16&with_origin_country=JP&sort_by=${
+        sort === "rating" ? "vote_average.desc" : "popularity.desc"
+      }&include_adult=false&page=${page}`
+    ),
 };
