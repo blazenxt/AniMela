@@ -18,7 +18,7 @@ export default function MediaCard({ item, className = "" }: { item: MediaItem; c
   const watched = isWatched(item.id);
 
   return (
-    <div className={`group relative w-full ${className}`}>
+    <div className={`group relative ${className}`}>
       <div className="relative aspect-[2/3] overflow-hidden rounded-xl bg-white/5 ring-1 ring-white/10">
         <Link href={href} className="absolute inset-0 block">
           {/* eslint-disable-next-line @next/next/no-img-element */}
