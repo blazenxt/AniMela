@@ -1,178 +1,209 @@
 # AniMela
 
-A free streaming site for **anime, movies and TV series** — built with Next.js (App Router), React and Tailwind CSS. Browse trending movies/series, search anything, and play instantly with embedded players. No accounts, no downloads.
+A free, modern streaming interface for **anime, movies and TV series** — built with
+Next.js (App Router), React and Tailwind CSS v4. Browse trending titles, search anything,
+browse by genre, keep a watchlist, and play instantly. No accounts, no downloads.
 
-## Features
-
-- **Home** — featured hero + `Trending Movies`, `Trending Series`, `Popular Anime` rows.
-- **Movies / Series / Anime** — paginated grids ("Load more").
-- **Search** — live multi-search across movies, series and people.
-- **Movie pages** — details, genres, ratings, IMDb link, and an embedded player (Videasy + VidFast).
-- **Series pages** — season selector + episode picker (with episode stills), and an embedded player that takes you straight to the right season/episode.
-
-## Tech stack
-
-- [Next.js 15](https://nextjs.org) (App Router) + React 19
-- [Tailwind CSS v4](https://tailwindcss.com)
-- TypeScript
-
-## Run it
-
-```bash
-npm install
-npm run dev        # http://localhost:3000
-# or, for a production build:
-npm run build && npm start
-```
-
-The server binds to `0.0.0.0` so it can be previewed / deployed anywhere.
-
-## Deploy to Vercel
-
-The repo is ready to deploy as-is — `vercel.json` sets the framework, build and install
-commands, and the `next build` passes cleanly.
-
-### Option A — Vercel dashboard (easiest)
-
-1. Push this repo to GitHub (already done).
-2. Go to [vercel.com/new](https://vercel.com/new) and **Import** the repo.
-3. Vercel auto-detects **Next.js** — leave the defaults:
-   - Build command: `next build`
-   - Install command: `npm install`
-   - Output directory: *(leave empty)*
-4. Click **Deploy**. Done — you get a `*.vercel.app` URL.
-
-### Option B — Vercel CLI
-
-```bash
-npm i -g vercel
-vercel login
-vercel          # preview deploy
-vercel --prod   # production deploy
-```
-
-### Optional environment variables
-
-| Variable | Purpose | Default |
-| --- | --- | --- |
-| `NEXT_PUBLIC_CINEZO_BASE` | Override the Cinezo API host if the domain changes | `https://cinezo.net` |
-
-> **Why client-side fetching?** Metadata is fetched from the browser first (no CORS problem
-> when Cinezo allows it), and falls back to the same-origin `/api/proxy` route on Vercel.
-> This keeps the app working even though Cinezo sits behind Cloudflare, and keeps Vercel
-> serverless usage minimal. Playback embeds (Videasy/VidFast) always run in the visitor's
-> browser, so hosting location never affects whether video plays.
+> **Disclaimer:** AniMela does not host any video files. Metadata is sourced from
+> third-party services and playback is delegated to external players. Use responsibly
+> and respect content owners' terms.
 
 ---
 
-## Deploy to Railway
+## ✨ Features
 
-The repo ships a `Dockerfile` (Next.js **standalone** output — small, fast, single `node server.js`
-process) plus a `railway.json` with a healthcheck. Railway uses the Dockerfile automatically.
+- **Home** — cinematic featured hero + `Trending Movies`, `Trending Series`, `Popular Anime` rows.
+- **Movies / Series** — paginated grids ("Load more") of weekly trending titles.
+- **Anime** — dedicated anime browser with **Series / Movies** tabs and **Popular / Top Rated** sorting (Japanese animation).
+- **Genres** — browse movies & series by genre (Movies + Series genre lists).
+- **Search** — live multi-search across movies, series and people.
+- **Movie pages** — backdrop hero, poster, genres, rating, runtime, IMDb link, cast, "More like this", and playback.
+- **Series pages** — season selector + episode picker (with episode stills), cast, "More like this", and per-episode playback.
+- **My List** — watchlist (❤ save any title) + **Continue Watching** (auto-remembers where you left off, saved to `localStorage`).
+- **Custom player** — a hand-rolled HTML5 player (hls.js) with full controls, used when a direct stream is available.
 
-### Option A — Railway dashboard (no PC / phone friendly)
+---
 
-1. Go to [railway.app](https://railway.app) → **Start a New Project** → **Deploy from GitHub repo**.
-2. Pick `blazenxt/AniMela`. Railway auto-detects the `Dockerfile` and builds it.
-3. When it finishes, Railway gives you a `*.up.railway.app` URL (set a custom domain under
-   **Settings → Networking** if you want).
-4. That's it — the app boots on Railway's `PORT` and passes the `/api/health` healthcheck.
+## 🧱 Tech stack
 
-### Option B — Railway CLI
+| Layer | Tech |
+| --- | --- |
+| Framework | [Next.js 15](https://nextjs.org) (App Router) + React 19 |
+| Styling | [Tailwind CSS v4](https://tailwindcss.com) |
+| Language | TypeScript |
+| Fonts | Inter + Space Grotesk (self-hosted via `@fontsource`) |
+| Video (custom player) | [hls.js](https://github.com/video-dev/hls.js) |
+
+---
+
+## 🚀 Run locally
+
+```bash
+npm install
+npm run dev          # http://localhost:3000
+
+# production build
+npm run build
+npm start
+```
+
+The server binds to `0.0.0.0` so it can be previewed or deployed anywhere.
+
+### Environment variables
+
+| Variable | Purpose | Default |
+| --- | --- | --- |
+| `NEXT_PUBLIC_CINEZO_BASE` | Override the metadata API host if the domain changes | `https://cinezo.org` |
+
+---
+
+## ☁️ Deploy
+
+The repo is deploy-ready for both Vercel and Railway.
+
+### Railway (recommended — long-running container)
+
+`Dockerfile` (Next.js **standalone** output) + `railway.json` (healthcheck on `/api/health`).
+
+1. [railway.app](https://railway.app) → **Start a New Project** → **Deploy from GitHub repo**.
+2. Pick this repo (branch: `arena/01a001db-animela`). Railway auto-detects the `Dockerfile`.
+3. Done — you get a `*.up.railway.app` URL (custom domain under **Settings → Networking**).
+
+CLI alternative:
 
 ```bash
 npm i -g @railway/cli
 railway login
-railway init        # create + link a project
-railway up          # deploy
-railway domain      # generate the public *.up.railway.app URL
+railway init
+railway up
+railway domain
 ```
 
-### What's in the deploy config
+> Railway is a long-running container (not serverless), so the `/api/proxy` fallback works
+> there reliably.
 
-- **`Dockerfile`** — multi-stage build → `next build` (standalone) → tiny Alpine runtime.
-- **`railway.json`** — `healthcheckPath: /api/health`, restart on failure.
-- Railway injects `PORT`/`HOSTNAME` at runtime; the server binds `0.0.0.0:$PORT` automatically.
+### Vercel
 
-> **Note:** Railway is a long-running container (not serverless), so the `/api/proxy` fallback
-> works there too if Cinezo ever blocks a direct browser fetch. But as always, playback embeds
-> run in the visitor's browser — hosting location never affects whether video plays.
+`vercel.json` sets the framework and build commands.
+
+1. [vercel.com/new](https://vercel.com/new) → **Import** the repo.
+2. Vercel auto-detects Next.js — accept the defaults (`next build` / `npm install`).
+3. **Deploy** → `*.vercel.app` URL.
+
+CLI:
+
+```bash
+npm i -g vercel
+vercel login
+vercel --prod
+```
 
 ---
 
-## The APIs used
+## 🗺️ Project structure
+
+```
+app/
+  page.tsx                   Home (hero + rows)
+  layout.tsx                 Root layout (fonts, providers)
+  globals.css                Tailwind theme + design tokens
+  movies/ series/ anime/     Grid pages
+  genres/                    Genre browser
+  genre/[kind]/[id]/         Genre results
+  search/                    Search results
+  mylist/                    Watchlist + continue watching
+  movie/[id]/                Movie detail + player
+  tv/[id]/                   Series detail + episodes + player
+  api/
+    health/route.ts          Healthcheck (Railway)
+    proxy/route.ts           CORS proxy (allow-listed)
+    source/route.ts          Direct-stream resolver
+components/
+  Navbar.tsx                 Sticky nav + mobile menu
+  Footer.tsx
+  MediaCard.tsx              Poster card (hover play, rating, watchlist)
+  MediaRow.tsx               Horizontal scrolling row
+  MediaGrid.tsx              Paginated grid ("Load more")
+  Player.tsx                 Player orchestrator (direct → embed)
+  CustomPlayer.tsx           HTML5 player (hls.js) with custom controls
+  SeasonEpisodes.tsx         Season selector + episode grid
+  CastList.tsx               Cast carousel
+  SimilarRow.tsx             "More like this" row
+  Icons.tsx                  SVG icon set
+  Loading.tsx / ErrorState.tsx
+  Providers.tsx              Context providers
+lib/
+  api.ts                     Metadata client (proxy-first + cache)
+  players.ts                 Playback URL builders
+  images.ts                  TMDB image helpers
+  types.ts                   Types + helpers
+  useApi.ts                  Data hook (loading / error / retry)
+  library.tsx                Watchlist + continue-watching (localStorage)
+  videasy-decrypt.ts         Direct-stream WASM decryption (server-side)
+  speedracelight.ts          Experimental direct-stream pipeline (stub)
+public/
+  favicon.svg  robots.txt
+  wasm/module1.wasm          WASM crypto core for stream decryption
+```
+
+---
+
+## 🔌 The APIs used
 
 ### 1. Metadata & browsing — Cinezo (TMDB proxy)
 
-Base URL: `https://cinezo.net` (redirects to `cinezo.org`). Overridable via `NEXT_PUBLIC_CINEZO_BASE`.
+Base URL `https://cinezo.org` (overridable via `NEXT_PUBLIC_CINEZO_BASE`). Returns TMDB-shaped JSON.
 
 | Purpose | Endpoint |
 | --- | --- |
 | Trending movies | `/api/tmdb/trending/movie/week?page=1` |
 | Trending TV | `/api/tmdb/trending/tv/week?page=1` |
-| Search | `/api/tmdb/search/multi?query={query}&page=1` |
-| Movie detail | `/api/tmdb/movie/{tmdbId}` |
-| TV detail | `/api/tmdb/tv/{tmdbId}` |
-| Season / episodes | `/api/tmdb/tv/{tmdbId}/season/{n}` |
+| Search | `/api/tmdb/search/multi?query={q}&page=1` |
+| Movie detail | `/api/tmdb/movie/{id}` |
+| TV detail | `/api/tmdb/tv/{id}` |
+| Season / episodes | `/api/tmdb/tv/{id}/season/{n}` |
+| Genres | `/api/tmdb/genre/{movie|tv}/list` |
+| Discover | `/api/tmdb/discover/{movie|tv}?with_genres={id}` |
+| Similar | `/api/tmdb/{movie|tv}/{id}/similar` |
+| Credits | `/api/tmdb/{movie|tv}/{id}/credits` |
+| Top rated | `/api/tmdb/{movie|tv}/top_rated` |
 
-Posters/backdrops use TMDB's image CDN: `https://image.tmdb.org/t/p/{size}{poster_path}`.
+Posters/backdrops use TMDB's image CDN: `https://image.tmdb.org/t/p/{size}{path}`.
 
-> **CORS / network note.** The app tries a **direct fetch** from the browser first
-> (works when the upstream sends CORS headers). If that fails it retries through the
-> same-origin proxy at `/api/proxy?url=…` (hostname-allow-listed, adds
-> `Access-Control-Allow-Origin: *`). Some of these hosts block datacenter IPs
-> (Cloudflare), so the proxy only helps when the server is running from a
-> non-blocked network — the direct browser fetch is always preferred.
+#### Fetching strategy (`lib/api.ts`)
 
-### 2. Playback — embedded players
+1. **Proxy-first** — same-origin `/api/proxy?url=…` (hostname-allow-listed, adds CORS headers).
+   Reliable on Railway; avoids Cloudflare blocks that hit residential mobile networks.
+2. **Direct fetch** — fallback when the user's network reaches Cinezo directly.
+3. **Caching** — 5-minute in-memory TTL so back/forward navigation is instant.
+4. **Hard timeouts** — every request aborts fast instead of hanging the page.
 
-Playback is an `<iframe>` embed, no extra headers needed:
+### 2. Playback — `components/Player.tsx`
 
-- **TV / anime series** — `https://player.videasy.to/tv/{tmdbId}/{season}/{episode}`
-  - e.g. Naruto S1 E9 → `https://player.videasy.to/tv/46260/1/9`
-- **Movies / anime movies** — `https://player.videasy.to/movie/{tmdbId}`
-  - e.g. Supergirl → `https://player.videasy.to/movie/1081003`
-- **Alternative movie player** — `https://vidfast.vc/movie/{tmdbId}?autoPlay=true`
+Playback is orchestrated: the player first tries a **direct HD stream** and falls back to an
+**embedded player** if no direct source resolves. A click-to-play overlay prevents the embed's
+first-tap ad/redirect from hijacking the page.
 
-Each player also has an **"open in a new tab"** fallback in case a host refuses iframe embedding.
+- **Direct stream** — `app/api/source/route.ts` resolves an HLS `.m3u8` and hands it to
+  `CustomPlayer` (hls.js) with fully custom controls (play/pause, seek, volume, quality, fullscreen).
+- **Embed fallbacks** (`lib/players.ts`):
+  - TV / anime — `https://player.videasy.to/tv/{tmdbId}/{season}/{episode}`
+  - Movies — `https://player.videasy.to/movie/{tmdbId}` and `https://vidfast.vc/movie/{tmdbId}`
 
-### 3. Direct stream (experimental) — SpeedRaceLight
+> The direct-stream backend (`lib/videasy-decrypt.ts`, `public/wasm/module1.wasm`) is a ported
+> WebAssembly decryption core. Its upstream endpoints are subject to change, so the app is built
+> to degrade gracefully to embeds.
 
-An optional pipeline that resolves a real HLS `.m3u8` instead of using an embed.
-See [`lib/speedracelight.ts`](./lib/speedracelight.ts) — the `seed` and `sources` fetches
-are implemented; the final **decryption** step is a documented stub because the cipher is
-a custom FNV-1a / SHA-K key-schedule that must be ported byte-for-byte from the obfuscated
-JS. The documented flow is:
+### 3. Experimental — SpeedRaceLight (`lib/speedracelight.ts`)
 
-1. `GET https://api.speedracelight.com/seed?mediaId={tmdbId}` → `{ seed, ttlMs }`
-2. `GET https://api.speedracelight.com/cdn/sources-with-title?...&seed=…` → base64 ciphertext
-3. decrypt with the (seed, tmdbId)-keyed stream cipher → JSON whose plaintext starts with `mvm1`
-4. play the returned HLS sources.
+An alternative HLS pipeline (seed → encrypted sources → decrypt). Documented but the decryption
+step is a stub pending a byte-exact cipher port. Kept for reference.
 
-> ⚠️ The final segment host serves from **residential-only IPs** (403 for datacenter IPs),
-> so this flow only works from a residential browser.
+---
 
-## Project structure
+## ⚖️ Legal note
 
-```
-app/
-  page.tsx              Home (hero + rows)
-  movies/ series/ anime/   Grid pages
-  search/               Search results
-  movie/[id]/           Movie detail + player
-  tv/[id]/              Series detail + season/episode picker
-  api/proxy/route.ts    CORS proxy (allow-listed)
-components/             Navbar, Footer, MediaCard, MediaRow, MediaGrid, Player, SeasonEpisodes, …
-lib/
-  api.ts                Cinezo client (direct → proxy fallback)
-  players.ts            Videasy / VidFast URL builders
-  images.ts             TMDB image helpers
-  types.ts              Types + helpers
-  useApi.ts             data hook (loading / error / retry)
-  speedracelight.ts     experimental direct-stream pipeline
-```
-
-## Disclaimer
-
-AniMela does not host any video files. All metadata and streams are provided by
-third-party services; use responsibly and respect the content owners' terms.
+This project is a **front-end / metadata interface** only. It does not host, store, or
+redistribute video content. Any streaming is performed by third-party services in the
+visitor's browser. Users are responsible for complying with the laws and terms of the
+content they access.
