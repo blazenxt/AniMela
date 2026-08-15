@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import CustomPlayer, { Source } from "./CustomPlayer";
+import { PlayIcon } from "./Icons";
 
 export interface FallbackSource {
   label: string;
@@ -22,13 +23,14 @@ export interface PlayerProps {
 export default function Player(props: PlayerProps) {
   const { kind, tmdbId, title, year, season, episode, imdbId, fallbacks } = props;
 
-  // Start on the embed immediately so playback is never blocked by a spinner,
-  // then upgrade to the direct HD player in the background if it resolves.
+  // The embed fires an ad/redirect on the FIRST tap inside the iframe.
+  // We avoid that by showing our own "click to play" overlay first — the
+  // user's first tap hits OUR button, and only then do we mount the iframe.
+  const [started, setStarted] = useState(false);
   const [mode, setMode] = useState<"embed" | "direct">("embed");
   const [sources, setSources] = useState<Source[]>([]);
   const [provider, setProvider] = useState<string>("");
   const [embedIndex, setEmbedIndex] = useState(0);
-  const [manualEmbed, setManualEmbed] = useState(false);
   const attempted = useRef(false);
 
   const loadDirect = useCallback(async () => {
@@ -44,17 +46,18 @@ export default function Player(props: PlayerProps) {
     if (imdbId) q.set("imdbId", imdbId);
 
     try {
-      const res = await fetch(`/api/source?${q.toString()}`, { signal: AbortSignal.timeout(12000) });
+      const res = await fetch(`/api/source?${q.toString()}`, { signal: AbortSignal.timeout(10000) });
       const data = await res.json();
-      if (res.ok && data?.sources?.length && !manualEmbed) {
+      if (res.ok && data?.sources?.length) {
         setSources(data.sources);
         setProvider(data.provider || "");
         setMode("direct");
+        setStarted(true); // direct player starts immediately, no overlay needed
       }
     } catch {
       // stay on embed
     }
-  }, [kind, tmdbId, title, year, season, episode, imdbId, manualEmbed]);
+  }, [kind, tmdbId, title, year, season, episode, imdbId]);
 
   useEffect(() => {
     if (attempted.current) return;
@@ -62,12 +65,13 @@ export default function Player(props: PlayerProps) {
     loadDirect();
   }, [loadDirect]);
 
-  // New title / episode → reset and try direct again (background).
+  // New title / episode → reset.
   useEffect(() => {
     attempted.current = false;
-    setMode(manualEmbed ? "embed" : "embed");
+    setMode("embed");
     setSources([]);
     setProvider("");
+    setStarted(false);
     loadDirect();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tmdbId, title, season, episode]);
@@ -75,13 +79,16 @@ export default function Player(props: PlayerProps) {
   return (
     <div>
       <div className="mb-3 flex flex-wrap items-center gap-2">
-        {mode === "direct" && sources.length > 0 ? (
+        {mode === "direct" && sources.length > 0 && started ? (
           <>
             <span className="rounded-lg bg-emerald-500/15 px-3 py-1.5 text-xs font-semibold text-emerald-300 ring-1 ring-emerald-500/30">
               HD player{provider ? ` · ${provider}` : ""}
             </span>
             <button
-              onClick={() => setManualEmbed(true)}
+              onClick={() => {
+                setMode("embed");
+                setStarted(false);
+              }}
               className="rounded-lg px-3 py-1.5 text-xs font-semibold text-zinc-400 transition hover:text-white"
             >
               Switch to embed
@@ -106,20 +113,29 @@ export default function Player(props: PlayerProps) {
         className="relative w-full overflow-hidden rounded-2xl bg-black ring-1 ring-white/10"
         style={{ aspectRatio: "16 / 9" }}
       >
-        {mode === "direct" && sources.length > 0 && !manualEmbed ? (
+        {mode === "direct" && sources.length > 0 && started ? (
           <CustomPlayer sources={sources} />
-        ) : (
+        ) : started ? (
+          // clean embed (no sandbox — Videasy refuses to run inside a sandbox)
           <iframe
             key={fallbacks[embedIndex]?.src}
             src={fallbacks[embedIndex]?.src}
             allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
             allowFullScreen
-            // Block popups & top-navigation so tapping the embed can't open
-            // ads or redirect the page away.
-            sandbox="allow-scripts allow-same-origin allow-presentation allow-fullscreen"
             className="absolute inset-0 h-full w-full border-0"
             title="Stream player"
           />
+        ) : (
+          // click-to-play overlay (our own button, before the embed mounts)
+          <button
+            onClick={() => setStarted(true)}
+            className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3"
+          >
+            <span className="flex h-16 w-16 items-center justify-center rounded-full bg-purple-600/90 shadow-lg shadow-purple-900/50 transition hover:scale-105">
+              <PlayIcon className="h-8 w-8 text-white" />
+            </span>
+            <span className="text-sm font-semibold text-zinc-200">Click to play</span>
+          </button>
         )}
       </div>
     </div>
