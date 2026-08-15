@@ -6,7 +6,7 @@ import { poster } from "@/lib/images";
 import { useLibrary, Kind } from "@/lib/library";
 import { HeartIcon, PlayIcon, StarIcon } from "@/components/Icons";
 
-export default function MediaCard({ item }: { item: MediaItem }) {
+export default function MediaCard({ item, className = "" }: { item: MediaItem; className?: string }) {
   const type = itemType(item);
   const kind: Kind = type === "movie" ? "movie" : "tv";
   const href = type === "movie" ? `/movie/${item.id}` : `/tv/${item.id}`;
@@ -18,7 +18,7 @@ export default function MediaCard({ item }: { item: MediaItem }) {
   const watched = isWatched(item.id);
 
   return (
-    <div className="group relative w-40 shrink-0 snap-start">
+    <div className={`group relative w-full ${className}`}>
       <div className="relative aspect-[2/3] overflow-hidden rounded-xl bg-white/5 ring-1 ring-white/10">
         <Link href={href} className="absolute inset-0 block">
           {/* eslint-disable-next-line @next/next/no-img-element */}

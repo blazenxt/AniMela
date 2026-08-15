@@ -22,7 +22,7 @@ export default function MediaRow({
       </div>
       <div className="flex snap-x gap-4 overflow-x-auto pb-2 no-scrollbar">
         {items.map((it) => (
-          <MediaCard key={it.id} item={it} />
+          <MediaCard key={it.id} item={it} className="w-40 shrink-0 snap-start" />
         ))}
       </div>
     </section>

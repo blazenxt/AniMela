@@ -87,18 +87,18 @@ export default function TvPage({ params }: { params: Promise<{ id: string }> }) 
         <div className="absolute inset-0 bg-gradient-to-t from-[#07070c] to-[#07070c]/30" />
       </div>
 
-      <div className="relative z-10 mx-auto -mt-24 max-w-7xl px-4 sm:px-6">
-        <div className="flex flex-col gap-6 sm:flex-row">
+      <div className="relative z-10 mx-auto -mt-20 max-w-7xl px-4 sm:-mt-24 sm:px-6">
+        <div className="flex flex-col items-center gap-5 text-center sm:flex-row sm:items-end sm:gap-6 sm:text-left">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={poster(data.poster_path, "w500")}
             alt={data.name}
-            className="w-40 rounded-2xl shadow-2xl ring-1 ring-white/10 sm:w-56"
+            className="w-36 shrink-0 rounded-2xl shadow-2xl ring-1 ring-white/10 sm:w-56"
           />
-          <div className="flex-1 pt-4 sm:pt-12">
-            <h1 className="text-3xl font-black text-white sm:text-5xl">{data.name}</h1>
+          <div className="min-w-0 flex-1 pb-1">
+            <h1 className="break-words text-2xl font-black text-white sm:text-5xl">{data.name}</h1>
             {data.tagline && <p className="mt-1 text-zinc-400 italic">“{data.tagline}”</p>}
-            <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-zinc-400">
+            <div className="mt-3 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 text-sm text-zinc-400 sm:justify-start">
               {year && <span>{year}</span>}
               <span>
                 • {data.number_of_seasons ?? realSeasons.length} season
@@ -112,7 +112,7 @@ export default function TvPage({ params }: { params: Promise<{ id: string }> }) 
               )}
             </div>
             {genres.length > 0 && (
-              <div className="mt-3 flex flex-wrap gap-2">
+              <div className="mt-3 flex flex-wrap justify-center gap-2 sm:justify-start">
                 {genres.map((g) => (
                   <span key={g} className="rounded-full bg-white/10 px-2 py-1 text-xs text-zinc-300">
                     {g}
