@@ -209,10 +209,10 @@ export async function unshorten(url: string): Promise<UnshortenResult> {
     const { finalUrl, html } = await fetchPage(url);
     const finalHost = extractHost(finalUrl);
 
-    // 1) Simple redirect shortener.
+    // 1) Simple redirect shortener → only trust it if it landed on a known
+    //    download host (otherwise it's just an ad hop, not the real link).
     if (finalHost && finalHost !== originalHost && finalUrl !== url) {
-      // Only accept if it moved to a real download host OR a different domain.
-      if (isKnownHost(finalUrl) || !finalHost.includes(originalHost.split(".")[0])) {
+      if (isKnownHost(finalUrl)) {
         return {
           ok: true,
           originalUrl: url,
@@ -240,7 +240,7 @@ export async function unshorten(url: string): Promise<UnshortenResult> {
     ].map((m) => m[1]);
     candidates.push(...js);
 
-    // clean + dedupe, drop the protector's own URLs
+    // clean + dedupe, drop protector's own URLs and obvious assets (img/css/js)
     const seen = new Set<string>();
     const external: string[] = [];
     for (const c of candidates) {
@@ -249,13 +249,15 @@ export async function unshorten(url: string): Promise<UnshortenResult> {
       u = u.replace(/\\\//g, "/").replace(/[),.;]+$/, "");
       const h = extractHost(u);
       if (!h || h === originalHost || h.endsWith(`.${originalHost}`)) continue;
+      if (/\.(png|jpe?g|gif|webp|svg|ico|css|js|woff2?|ttf|otf|eot)([?#].*)?$/i.test(u)) continue;
       if (seen.has(u)) continue;
       seen.add(u);
       external.push(u);
     }
 
-    const known = external.filter(isKnownHost);
-    const pick = known[0] || external[0];
+    // Only accept a known download host — captcha-gated protectors don't embed
+    // the real link in HTML, so anything else is an ad/asset false-positive.
+    const pick = external.find(isKnownHost);
 
     if (pick) {
       return {
@@ -267,7 +269,7 @@ export async function unshorten(url: string): Promise<UnshortenResult> {
       };
     }
 
-    return { ...base, note: "no embedded link found (may be captcha-gated)" };
+    return { ...base, note: "no direct link found (likely captcha-gated)" };
   } catch (e) {
     return {
       ...base,
