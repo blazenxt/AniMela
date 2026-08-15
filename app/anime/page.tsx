@@ -1,11 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import MediaGrid from "@/components/MediaGrid";
+import AnimeGrid from "@/components/AnimeGrid";
 import { api } from "@/lib/api";
 
 type Tab = "series" | "movies";
-type Sort = "popularity" | "rating";
+type Sort = "trending" | "popularity" | "rating";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "series", label: "Anime Series" },
@@ -13,19 +13,21 @@ const TABS: { id: Tab; label: string }[] = [
 ];
 
 const SORTS: { id: Sort; label: string }[] = [
+  { id: "trending", label: "Trending" },
   { id: "popularity", label: "Popular" },
   { id: "rating", label: "Top Rated" },
 ];
 
 export default function AnimePage() {
   const [tab, setTab] = useState<Tab>("series");
-  const [sort, setSort] = useState<Sort>("popularity");
+  const [sort, setSort] = useState<Sort>("trending");
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6">
       <h1 className="mb-1 font-display text-3xl font-bold text-white">Anime</h1>
       <p className="mb-6 text-sm text-zinc-500">
-        Discover anime series &amp; movies — Japanese animation, ranked by popularity or rating.
+        Real anime catalog — Japanese &amp; English titles, studios, airing status and MAL-style
+        scores, sourced from AniList.
       </p>
 
       {/* tab + sort controls */}
@@ -59,10 +61,10 @@ export default function AnimePage() {
         </div>
       </div>
 
-      <MediaGrid
+      <AnimeGrid
         key={`${tab}-${sort}`}
         emptyLabel="No anime found."
-        fetchPage={(p) => (tab === "series" ? api.animeSeries(p, sort) : api.animeMovies(p, sort))}
+        fetchPage={(p) => api.animeBrowse({ type: tab, sort, page: p })}
       />
     </div>
   );

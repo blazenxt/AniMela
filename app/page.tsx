@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import { useApi } from "@/lib/useApi";
 import { useLibrary } from "@/lib/library";
 import MediaRow from "@/components/MediaRow";
+import AnimeRow from "@/components/AnimeRow";
 import Loading from "@/components/Loading";
 import { MediaItem, itemTitle } from "@/lib/types";
 import { backdrop, poster } from "@/lib/images";
@@ -14,7 +15,7 @@ import { PlayIcon, SparklesIcon, StarIcon } from "@/components/Icons";
 export default function Home() {
   const movies = useApi(() => api.trendingMovies(1), []);
   const series = useApi(() => api.trendingTv(1), []);
-  const anime = useApi(() => api.animeSeries(1, "popularity"), []);
+  const anime = useApi(() => api.animeBrowse({ type: "series", sort: "trending", page: 1 }), []);
   const { watchlist, continueWatching } = useLibrary();
 
   const hero: MediaItem | undefined = useMemo(() => {
@@ -22,13 +23,7 @@ export default function Home() {
     return list.find((m) => m.backdrop_path) || list[0];
   }, [movies.data]);
 
-  const animeItems = useMemo(
-    () =>
-      ((anime.data?.results || []) as MediaItem[])
-        .filter((m) => m.media_type !== "person")
-        .slice(0, 20),
-    [anime.data]
-  );
+  const animeItems = useMemo(() => (anime.data?.results || []).slice(0, 20), [anime.data]);
   const heroType = hero?.media_type || (hero?.title ? "movie" : "tv");
 
   return (
@@ -162,7 +157,7 @@ export default function Home() {
 
         <MediaRow title="Trending Movies" items={movies.data?.results || []} accent="bg-fuchsia-500" viewAllHref="/movies" />
         <MediaRow title="Trending Series" items={series.data?.results || []} accent="bg-indigo-500" viewAllHref="/series" />
-        <MediaRow title="Popular Anime" items={animeItems} accent="bg-rose-500" viewAllHref="/anime" />
+        <AnimeRow title="Trending Anime" items={animeItems} accent="bg-rose-500" viewAllHref="/anime" />
       </div>
     </div>
   );
