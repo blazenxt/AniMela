@@ -54,7 +54,7 @@ async function fetchCipher(endpoint: string, params: Params): Promise<string> {
   if (params.imdbId) q.set("imdbId", params.imdbId);
 
   const url = `${API_BASE}/${endpoint}/sources-with-title?${q.toString()}`;
-  const res = await fetch(url, { headers: HEADERS, signal: AbortSignal.timeout(20000) });
+  const res = await fetch(url, { headers: HEADERS, signal: AbortSignal.timeout(8000) });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return (await res.text()).trim();
 }

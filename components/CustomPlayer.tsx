@@ -201,26 +201,17 @@ export default function CustomPlayer({ sources }: Props) {
         className="absolute inset-0 h-full w-full object-contain"
       />
 
-      {/* big center play / pause */}
-      {!buffering && (
+      {/* big center play button — only shown while paused */}
+      {!playing && !buffering && (
         <button
           onClick={togglePlay}
-          aria-label={playing ? "Pause" : "Play"}
-          className={`absolute inset-0 z-10 flex items-center justify-center transition ${
-            playing && controlsVisible ? "opacity-0" : "opacity-100"
-          }`}
+          aria-label="Play"
+          className="absolute inset-0 z-10 flex items-center justify-center"
         >
           <span className="flex h-16 w-16 items-center justify-center rounded-full bg-black/50 backdrop-blur">
-            {playing ? (
-              <svg viewBox="0 0 24 24" fill="white" className="h-8 w-8">
-                <rect x="6" y="5" width="4" height="14" rx="1" />
-                <rect x="14" y="5" width="4" height="14" rx="1" />
-              </svg>
-            ) : (
-              <svg viewBox="0 0 24 24" fill="white" className="h-8 w-8">
-                <path d="M8 5.14v13.72c0 .8.87 1.3 1.56.88l11.14-6.86a1.03 1.03 0 0 0 0-1.76L9.56 4.26A1.03 1.03 0 0 0 8 5.14Z" />
-              </svg>
-            )}
+            <svg viewBox="0 0 24 24" fill="white" className="h-8 w-8">
+              <path d="M8 5.14v13.72c0 .8.87 1.3 1.56.88l11.14-6.86a1.03 1.03 0 0 0 0-1.76L9.56 4.26A1.03 1.03 0 0 0 8 5.14Z" />
+            </svg>
           </span>
         </button>
       )}

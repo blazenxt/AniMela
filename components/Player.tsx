@@ -19,12 +19,12 @@ export interface PlayerProps {
   fallbacks: FallbackSource[];
 }
 
-type Mode = "loading" | "direct" | "embed" | "error";
-
 export default function Player(props: PlayerProps) {
   const { kind, tmdbId, title, year, season, episode, imdbId, fallbacks } = props;
 
-  const [mode, setMode] = useState<Mode>("loading");
+  // Start on the embed immediately so playback is never blocked by a spinner,
+  // then upgrade to the direct HD player in the background if it resolves.
+  const [mode, setMode] = useState<"embed" | "direct">("embed");
   const [sources, setSources] = useState<Source[]>([]);
   const [provider, setProvider] = useState<string>("");
   const [embedIndex, setEmbedIndex] = useState(0);
@@ -44,81 +44,61 @@ export default function Player(props: PlayerProps) {
     if (imdbId) q.set("imdbId", imdbId);
 
     try {
-      const res = await fetch(`/api/source?${q.toString()}`, { signal: AbortSignal.timeout(45000) });
+      const res = await fetch(`/api/source?${q.toString()}`, { signal: AbortSignal.timeout(12000) });
       const data = await res.json();
-      if (res.ok && data?.sources?.length) {
+      if (res.ok && data?.sources?.length && !manualEmbed) {
         setSources(data.sources);
         setProvider(data.provider || "");
         setMode("direct");
-        return;
       }
-      setMode("embed");
     } catch {
-      setMode("embed");
+      // stay on embed
     }
-  }, [kind, tmdbId, title, year, season, episode, imdbId]);
+  }, [kind, tmdbId, title, year, season, episode, imdbId, manualEmbed]);
 
   useEffect(() => {
-    if (attempted.current || manualEmbed) return;
+    if (attempted.current) return;
     attempted.current = true;
     loadDirect();
-  }, [loadDirect, manualEmbed]);
+  }, [loadDirect]);
 
-  // Reset when a new episode/title loads (same component instance re-used)
+  // New title / episode → reset and try direct again (background).
   useEffect(() => {
     attempted.current = false;
-    if (!manualEmbed) {
-      setMode("loading");
-      setSources([]);
-      setProvider("");
-      loadDirect();
-    }
+    setMode(manualEmbed ? "embed" : "embed");
+    setSources([]);
+    setProvider("");
+    loadDirect();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tmdbId, title, season, episode]);
 
   return (
     <div>
-      {/* mode toggle */}
       <div className="mb-3 flex flex-wrap items-center gap-2">
-        {mode === "direct" && sources.length > 0 && (
-          <span className="rounded-lg bg-emerald-500/15 px-3 py-1.5 text-xs font-semibold text-emerald-300 ring-1 ring-emerald-500/30">
-            HD stream{provider ? ` · ${provider}` : ""}
-          </span>
-        )}
-        {(mode === "embed" || manualEmbed) && fallbacks.map((f, i) => (
-          <button
-            key={f.label}
-            onClick={() => {
-              setManualEmbed(true);
-              setEmbedIndex(i);
-            }}
-            className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${
-              i === embedIndex && manualEmbed ? "bg-purple-600 text-white" : "bg-white/5 text-zinc-300 hover:bg-white/10"
-            }`}
-          >
-            {f.label}
-          </button>
-        ))}
-        {mode === "direct" && sources.length > 0 && fallbacks.length > 0 && (
-          <button
-            onClick={() => setManualEmbed(true)}
-            className="rounded-lg px-3 py-1.5 text-xs font-semibold text-zinc-400 transition hover:text-white"
-          >
-            Switch to embed
-          </button>
-        )}
-        {manualEmbed && (
-          <button
-            onClick={() => {
-              setManualEmbed(false);
-              setMode("loading");
-              attempted.current = false;
-              loadDirect();
-            }}
-            className="rounded-lg px-3 py-1.5 text-xs font-semibold text-zinc-400 transition hover:text-white"
-          >
-            Use HD player
-          </button>
+        {mode === "direct" && sources.length > 0 ? (
+          <>
+            <span className="rounded-lg bg-emerald-500/15 px-3 py-1.5 text-xs font-semibold text-emerald-300 ring-1 ring-emerald-500/30">
+              HD player{provider ? ` · ${provider}` : ""}
+            </span>
+            <button
+              onClick={() => setManualEmbed(true)}
+              className="rounded-lg px-3 py-1.5 text-xs font-semibold text-zinc-400 transition hover:text-white"
+            >
+              Switch to embed
+            </button>
+          </>
+        ) : (
+          fallbacks.map((f, i) => (
+            <button
+              key={f.label}
+              onClick={() => setEmbedIndex(i)}
+              className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${
+                i === embedIndex ? "bg-purple-600 text-white" : "bg-white/5 text-zinc-300 hover:bg-white/10"
+              }`}
+            >
+              {f.label}
+            </button>
+          ))
         )}
       </div>
 
@@ -126,23 +106,17 @@ export default function Player(props: PlayerProps) {
         className="relative w-full overflow-hidden rounded-2xl bg-black ring-1 ring-white/10"
         style={{ aspectRatio: "16 / 9" }}
       >
-        {mode === "loading" && !manualEmbed && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-zinc-400">
-            <div className="h-8 w-8 animate-spin rounded-full border-2 border-purple-500/30 border-t-purple-500" />
-            <span className="text-sm">Finding the best stream…</span>
-          </div>
-        )}
-
-        {mode === "direct" && !manualEmbed && sources.length > 0 && (
+        {mode === "direct" && sources.length > 0 && !manualEmbed ? (
           <CustomPlayer sources={sources} />
-        )}
-
-        {(manualEmbed || mode === "embed") && fallbacks.length > 0 && (
+        ) : (
           <iframe
             key={fallbacks[embedIndex]?.src}
             src={fallbacks[embedIndex]?.src}
             allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
             allowFullScreen
+            // Block popups & top-navigation so tapping the embed can't open
+            // ads or redirect the page away.
+            sandbox="allow-scripts allow-same-origin allow-presentation allow-fullscreen"
             className="absolute inset-0 h-full w-full border-0"
             title="Stream player"
           />
