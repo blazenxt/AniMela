@@ -152,15 +152,23 @@ export function decodeObfuscated(encoded: string): string {
  */
 export function extractDecodedUrls(html: string): string[] {
   const found: string[] = [];
+  for (const decoded of extractDecodedTexts(html)) {
+    found.push(...extractUrls(decoded));
+  }
+  return found;
+}
+
+/** Return the fully-decoded payload text for every `decodeURI("…")` call. */
+export function extractDecodedTexts(html: string): string[] {
+  const out: string[] = [];
   // Double-quoted payload (the protector's string may contain apostrophes,
   // so we can't use a broad [^"'] exclusion).
   const re = /decodeURI(?:Component)?\s*\(\s*"((?:[^"\\]|\\.)*)"\s*\)/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(html)) !== null) {
-    const decoded = decodeObfuscated(m[1]);
-    found.push(...extractUrls(decoded));
+    out.push(decodeObfuscated(m[1]));
   }
-  return found;
+  return out;
 }
 
 export async function unshorten(url: string): Promise<UnshortenResult> {
