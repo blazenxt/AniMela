@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { useApi } from "@/lib/useApi";
 import { useLibrary } from "@/lib/library";
-import Player, { PlayerSource } from "@/components/Player";
+import Player from "@/components/Player";
 import Loading from "@/components/Loading";
 import ErrorState from "@/components/ErrorState";
 import SeasonEpisodes from "@/components/SeasonEpisodes";
@@ -65,7 +65,7 @@ export default function TvPage({ params }: { params: Promise<{ id: string }> }) 
   if (loading) return <Loading />;
   if (error || !data) return <ErrorState message={error || "Series not found."} onRetry={retry} />;
 
-  const sources: PlayerSource[] = [
+  const sources: { label: string; src: string }[] = [
     { label: "Server 1", src: videasyTv(id, season, episode) },
   ];
 
@@ -141,7 +141,15 @@ export default function TvPage({ params }: { params: Promise<{ id: string }> }) 
 
         <div className="mt-8 space-y-8">
           <div>
-            <Player sources={sources} />
+            <Player
+              kind="tv"
+              tmdbId={data.id}
+              title={data.name}
+              year={year}
+              season={season}
+              episode={episode}
+              fallbacks={sources}
+            />
           </div>
 
           {data.overview && (

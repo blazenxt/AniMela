@@ -4,7 +4,7 @@ import { use, useEffect } from "react";
 import { api } from "@/lib/api";
 import { useApi } from "@/lib/useApi";
 import { useLibrary } from "@/lib/library";
-import Player, { PlayerSource } from "@/components/Player";
+import Player from "@/components/Player";
 import Loading from "@/components/Loading";
 import ErrorState from "@/components/ErrorState";
 import CastList from "@/components/CastList";
@@ -35,7 +35,7 @@ export default function MoviePage({ params }: { params: Promise<{ id: string }> 
   if (loading) return <Loading />;
   if (error || !data) return <ErrorState message={error || "Movie not found."} onRetry={retry} />;
 
-  const sources: PlayerSource[] = [
+  const sources: { label: string; src: string }[] = [
     { label: "Server 1", src: videasyMovie(id) },
     { label: "Server 2", src: vidfastMovie(id) },
   ];
@@ -110,7 +110,14 @@ export default function MoviePage({ params }: { params: Promise<{ id: string }> 
 
         <div className="mt-8 grid gap-8 lg:grid-cols-[1fr_340px]">
           <div>
-            <Player sources={sources} />
+            <Player
+              kind="movie"
+              tmdbId={data.id}
+              title={data.title}
+              year={year}
+              imdbId={data.imdb_id}
+              fallbacks={sources}
+            />
             {data.overview && (
               <div className="mt-6">
                 <h2 className="mb-2 text-lg font-bold text-white">Overview</h2>
