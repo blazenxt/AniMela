@@ -51,8 +51,9 @@ export default function MoviePage({ params }: { params: Promise<{ id: string }> 
       <div className="relative h-[40vh] min-h-[240px] w-full overflow-hidden">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={backdrop(data.backdrop_path, "original")}
+          src={backdrop(data.backdrop_path, "w1280")}
           alt=""
+          decoding="async"
           className="absolute inset-0 h-full w-full object-cover"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-[#07070c] to-[#07070c]/30" />

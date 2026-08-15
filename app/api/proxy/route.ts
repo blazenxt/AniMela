@@ -43,6 +43,7 @@ export async function GET(req: NextRequest) {
         Accept: "application/json, text/plain, */*",
         "User-Agent": UA,
       },
+      signal: AbortSignal.timeout(15000),
       cache: "no-store",
     });
 

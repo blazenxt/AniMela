@@ -38,8 +38,10 @@ export default function Home() {
         <div className="relative h-[68vh] min-h-[420px] w-full overflow-hidden">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src={backdrop(hero.backdrop_path, "original")}
+            src={backdrop(hero.backdrop_path, "w1280")}
             alt=""
+            decoding="async"
+            fetchPriority="high"
             className="absolute inset-0 h-full w-full object-cover"
           />
           <div className="absolute inset-0 bg-gradient-to-t from-[#07070c] via-[#07070c]/55 to-transparent" />

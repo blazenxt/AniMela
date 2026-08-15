@@ -9,27 +9,86 @@
  *   /api/tmdb/movie/{id}
  *   /api/tmdb/tv/{id}
  *   /api/tmdb/tv/{id}/season/{n}
+ *   ... (genres, discover, similar, credits)
  *
- * The client first tries a direct fetch (works when the upstream sends CORS
- * headers). If that fails (CORS / network), it retries through our own
- * same-origin proxy route at /api/proxy, which adds Access-Control-Allow-Origin.
+ * Performance notes:
+ *   - We hit `cinezo.org` directly (skips the cinezo.net -> cinezo.org redirect).
+ *   - Every request has a hard timeout (AbortSignal.timeout) so a stalled
+ *     connection fails FAST instead of hanging the page for minutes.
+ *   - Responses are cached in-memory for 5 minutes (TTL) so back/forward
+ *     navigation is instant instead of re-fetching.
+ *   - The client tries a direct fetch first (no extra hop when the user's
+ *     network reaches Cinezo). On any failure/timeout it retries through our
+ *     same-origin proxy at /api/proxy (Railway has fast, non-blocked egress).
  */
 
-const BASE = (process.env.NEXT_PUBLIC_CINEZO_BASE || "https://cinezo.net").replace(/\/+$/, "");
+const BASE = (process.env.NEXT_PUBLIC_CINEZO_BASE || "https://cinezo.org").replace(/\/+$/, "");
+
+const DIRECT_TIMEOUT_MS = 8000;
+const PROXY_TIMEOUT_MS = 15000;
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const CACHE_MAX = 300;
+
+interface CacheEntry {
+  value: unknown;
+  expires: number;
+}
+
+const cache = new Map<string, CacheEntry>();
+
+function getCached(key: string): unknown | undefined {
+  const hit = cache.get(key);
+  if (!hit) return undefined;
+  if (hit.expires > Date.now()) return hit.value;
+  cache.delete(key);
+  return undefined;
+}
+
+function setCached(key: string, value: unknown) {
+  if (cache.size >= CACHE_MAX) {
+    const oldest = cache.keys().next().value;
+    if (oldest !== undefined) cache.delete(oldest);
+  }
+  cache.set(key, { value, expires: Date.now() + CACHE_TTL_MS });
+}
+
+async function fetchJson(url: string, timeoutMs: number): Promise<{ ok: boolean; data: unknown }> {
+  const res = await fetch(url, {
+    headers: { Accept: "application/json" },
+    signal: AbortSignal.timeout(timeoutMs),
+  });
+  if (!res.ok) return { ok: false, data: null };
+  const data = await res.json();
+  return { ok: true, data };
+}
 
 async function request(url: string): Promise<any> {
-  // 1) Direct fetch.
+  const cached = getCached(url);
+  if (cached !== undefined) return cached;
+
+  // 1) Direct fetch (fast path, no extra hop).
   try {
-    const res = await fetch(url, { headers: { Accept: "application/json" }, cache: "no-store" });
-    if (res.ok) return await res.json();
-    // fall through to proxy for non-ok (some 403s may be recoverable)
+    const { ok, data } = await fetchJson(url, DIRECT_TIMEOUT_MS);
+    if (ok) {
+      setCached(url, data);
+      return data;
+    }
   } catch {
-    // CORS or network error — fall through to proxy.
+    // timeout / CORS / network — fall through to the proxy
   }
 
-  // 2) Same-origin proxy (avoids CORS entirely).
-  const res = await fetch(`/api/proxy?url=${encodeURIComponent(url)}`, { cache: "no-store" });
-  if (!res.ok) {
+  // 2) Same-origin proxy (no CORS; reliable egress on Railway).
+  try {
+    const { ok, data } = await fetchJson(
+      `/api/proxy?url=${encodeURIComponent(url)}`,
+      PROXY_TIMEOUT_MS
+    );
+    if (ok) {
+      setCached(url, data);
+      return data;
+    }
+    throw new Error(`proxy returned non-ok for ${url}`);
+  } catch (e) {
     const host = (() => {
       try {
         return new URL(url).hostname;
@@ -37,9 +96,10 @@ async function request(url: string): Promise<any> {
         return "the API";
       }
     })();
-    throw new Error(`Could not reach ${host} (status ${res.status}). It may be blocking this network — try from a residential connection or set NEXT_PUBLIC_CINEZO_BASE.`);
+    throw new Error(
+      `Could not reach ${host}. It may be blocking this network — try again or set NEXT_PUBLIC_CINEZO_BASE.`
+    );
   }
-  return await res.json();
 }
 
 export type Kind = "movie" | "tv";
