@@ -152,7 +152,9 @@ export function decodeObfuscated(encoded: string): string {
  */
 export function extractDecodedUrls(html: string): string[] {
   const found: string[] = [];
-  const re = /decodeURI(?:Component)?\s*\(\s*["']([^"']+)["']\s*\)/g;
+  // Double-quoted payload (the protector's string may contain apostrophes,
+  // so we can't use a broad [^"'] exclusion).
+  const re = /decodeURI(?:Component)?\s*\(\s*"((?:[^"\\]|\\.)*)"\s*\)/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(html)) !== null) {
     const decoded = decodeObfuscated(m[1]);
