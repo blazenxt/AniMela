@@ -52,7 +52,7 @@ export default function Home() {
               <SparklesIcon className="h-3.5 w-3.5 text-amber-400" />
               Featured
             </span>
-            <h1 className="break-words text-4xl font-black text-white drop-shadow-lg sm:text-6xl">
+            <h1 className="break-words text-2xl font-black text-white drop-shadow-lg sm:text-5xl md:text-6xl">
               {itemTitle(hero)}
             </h1>
             {hero.overview && (

@@ -24,8 +24,8 @@
 
 const BASE = (process.env.NEXT_PUBLIC_CINEZO_BASE || "https://cinezo.org").replace(/\/+$/, "");
 
-const DIRECT_TIMEOUT_MS = 8000;
-const PROXY_TIMEOUT_MS = 15000;
+const DIRECT_TIMEOUT_MS = 4000;
+const PROXY_TIMEOUT_MS = 12000;
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 const CACHE_MAX = 300;
 
@@ -66,18 +66,8 @@ async function request(url: string): Promise<any> {
   const cached = getCached(url);
   if (cached !== undefined) return cached;
 
-  // 1) Direct fetch (fast path, no extra hop).
-  try {
-    const { ok, data } = await fetchJson(url, DIRECT_TIMEOUT_MS);
-    if (ok) {
-      setCached(url, data);
-      return data;
-    }
-  } catch {
-    // timeout / CORS / network — fall through to the proxy
-  }
-
-  // 2) Same-origin proxy (no CORS; reliable egress on Railway).
+  // 1) Same-origin proxy FIRST — reliable egress on Railway, no CORS, no
+  //    Cloudflare blocks that hit residential mobile networks.
   try {
     const { ok, data } = await fetchJson(
       `/api/proxy?url=${encodeURIComponent(url)}`,
@@ -87,19 +77,31 @@ async function request(url: string): Promise<any> {
       setCached(url, data);
       return data;
     }
-    throw new Error(`proxy returned non-ok for ${url}`);
-  } catch (e) {
-    const host = (() => {
-      try {
-        return new URL(url).hostname;
-      } catch {
-        return "the API";
-      }
-    })();
-    throw new Error(
-      `Could not reach ${host}. It may be blocking this network — try again or set NEXT_PUBLIC_CINEZO_BASE.`
-    );
+  } catch {
+    // proxy down / timeout — fall through to direct
   }
+
+  // 2) Direct fetch fallback (fast when the user's network reaches Cinezo).
+  try {
+    const { ok, data } = await fetchJson(url, DIRECT_TIMEOUT_MS);
+    if (ok) {
+      setCached(url, data);
+      return data;
+    }
+  } catch {
+    // also failed — report below
+  }
+
+  const host = (() => {
+    try {
+      return new URL(url).hostname;
+    } catch {
+      return "the API";
+    }
+  })();
+  throw new Error(
+    `Could not reach ${host}. This is usually temporary — tap retry, or check your connection.`
+  );
 }
 
 export type Kind = "movie" | "tv";

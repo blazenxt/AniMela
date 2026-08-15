@@ -67,7 +67,7 @@ export default function Navbar() {
           ))}
         </nav>
 
-        <form onSubmit={submit} className="ml-auto w-full max-w-md">
+        <form onSubmit={submit} className="ml-auto min-w-0 flex-1 max-w-md">
           <div className="relative">
             <svg
               className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500"
@@ -84,8 +84,8 @@ export default function Navbar() {
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Search movies, anime, series…"
-              className="w-full rounded-full border border-white/10 bg-white/5 py-2 pl-10 pr-4 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500/60"
+              placeholder="Search…"
+              className="w-full min-w-0 rounded-full border border-white/10 bg-white/5 py-2 pl-10 pr-4 text-sm text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-purple-500/60"
             />
           </div>
         </form>
