@@ -201,6 +201,68 @@ step is a stub pending a byte-exact cipher port. Kept for reference.
 
 ---
 
+## 🌐 Public API
+
+AniMela exposes a read-only metadata API at **`/api/v1`** (JSON, CORS-enabled, 5-min cache).
+It returns TMDB metadata only — no video/stream endpoints.
+
+**Base:** `https://your-domain/api/v1`
+
+### Endpoints
+
+| Method | Path | Description | Params |
+| --- | --- | --- | --- |
+| GET | `/api/v1` | API index + endpoint list | — |
+| GET | `/api/v1/trending/movies` | Trending movies (week) | `page` |
+| GET | `/api/v1/trending/tv` | Trending series (week) | `page` |
+| GET | `/api/v1/trending/all` | Trending movies + TV + people | `page` |
+| GET | `/api/v1/search` | Multi-search | `q`, `page` |
+| GET | `/api/v1/movie/{id}` | Movie details | — |
+| GET | `/api/v1/tv/{id}` | Series details | — |
+| GET | `/api/v1/tv/{id}/season/{n}` | Season episodes | — |
+| GET | `/api/v1/genres/movies` | Movie genres | — |
+| GET | `/api/v1/genres/tv` | TV genres | — |
+| GET | `/api/v1/anime` | Anime series/movies (JP animation) | `type` (series\|movies), `sort` (popularity\|rating), `page` |
+| GET | `/api/v1/movie/{id}/similar` | Similar movies | `page` |
+| GET | `/api/v1/tv/{id}/similar` | Similar series | `page` |
+| GET | `/api/v1/movie/{id}/credits` | Movie cast & crew | — |
+| GET | `/api/v1/tv/{id}/credits` | Series cast & crew | — |
+
+### Response shape
+
+Every endpoint returns a uniform envelope:
+
+```json
+{ "ok": true, "data": { ... } }
+```
+
+On error:
+
+```json
+{ "ok": false, "error": "message" }
+```
+
+### Examples
+
+```bash
+# index
+curl https://your-domain/api/v1
+
+# trending movies, page 2
+curl "https://your-domain/api/v1/trending/movies?page=2"
+
+# search
+curl "https://your-domain/api/v1/search?q=naruto"
+
+# movie details
+curl "https://your-domain/api/v1/movie/1081003"
+
+# anime movies, top rated
+curl "https://your-domain/api/v1/anime?type=movies&sort=rating"
+```
+
+---
+
 ## ⚖️ Legal note
 
 This project is a **front-end / metadata interface** only. It does not host, store, or
