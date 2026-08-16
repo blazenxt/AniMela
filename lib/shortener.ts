@@ -60,6 +60,8 @@ export interface UnshortenResult {
   host?: string;
   method: "adfly" | "gplinks" | "droplink" | "gdtot" | "sharer" | "appdrive" | "redirect" | "embedded" | "manual";
   note?: string;
+  /** true when the final file-host link is dead (e.g. gofile content removed). */
+  dead?: boolean;
 }
 
 function extractHost(url: string): string {
@@ -404,6 +406,35 @@ function isFinalHost(url: string): boolean {
 
 const MAX_HOPS = 5;
 
+// ── Gofile dead-link detection ──────────────────────────────────────────────
+
+/**
+ * Gofile deletes files after inactivity / takedowns, so a resolved gofile link
+ * can be dead. Its public API tells us cheaply:
+ *   GET https://api.gofile.io/getContent?contentId={id}
+ *     → { status: "ok", ... }        alive
+ *     → { status: "error-notFound" } dead
+ */
+async function checkGofile(url: string): Promise<{ alive: boolean; note?: string }> {
+  try {
+    const m = url.match(/gofile\.io\/d\/([A-Za-z0-9]+)/);
+    if (!m) return { alive: true }; // can't parse id — don't block
+    const contentId = m[1];
+    const res = await fetch(`https://api.gofile.io/getContent?contentId=${contentId}`, {
+      headers: { "User-Agent": UA },
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    });
+    const json = await res.json().catch(() => null);
+    if (json?.status === "ok") return { alive: true };
+    if (json?.status === "error-notFound") {
+      return { alive: false, note: "file removed from gofile (dead link)" };
+    }
+    return { alive: true }; // unknown status — don't block
+  } catch {
+    return { alive: true }; // API unreachable — assume alive
+  }
+}
+
 /** Resolve ONE hop. Returns `{ url?, method, note? }` — `url` may itself be a shortener. */
 async function resolveHop(
   url: string
@@ -449,6 +480,36 @@ export interface UnshortenChainResult extends UnshortenResult {
   chain?: string[];
 }
 
+/**
+ * Build the success result for a terminal download link, checking gofile
+ * liveness so users aren't sent to a dead file.
+ */
+async function finalize(
+  inputUrl: string,
+  resolvedUrl: string,
+  method: UnshortenResult["method"],
+  chain: string[]
+): Promise<UnshortenChainResult> {
+  const host = extractHost(resolvedUrl);
+  const result: UnshortenChainResult = {
+    ok: true,
+    originalUrl: inputUrl,
+    resolvedUrl,
+    host,
+    method,
+    chain,
+  };
+
+  if (host === "gofile.io" || host.endsWith(".gofile.io")) {
+    const g = await checkGofile(resolvedUrl);
+    if (!g.alive) {
+      result.dead = true;
+      result.note = g.note;
+    }
+  }
+  return result;
+}
+
 export async function unshorten(url: string): Promise<UnshortenChainResult> {
   const base: UnshortenChainResult = { ok: false, originalUrl: url, method: "manual" };
 
@@ -463,7 +524,7 @@ export async function unshorten(url: string): Promise<UnshortenChainResult> {
 
   // already a terminal link (user pasted a direct file URL)?
   if (isFinalHost(url)) {
-    return { ok: true, originalUrl: url, resolvedUrl: url, host: extractHost(url), method: "redirect", chain: [url] };
+    return finalize(url, url, "redirect", [url]);
   }
 
   const chain: string[] = [url];
@@ -486,7 +547,7 @@ export async function unshorten(url: string): Promise<UnshortenChainResult> {
       if (!chain.includes(current)) chain.push(current);
 
       if (isFinalHost(current)) {
-        return { ok: true, originalUrl: url, resolvedUrl: current, host: extractHost(current), method, chain };
+        return finalize(url, current, method, chain);
       }
       continue; // follow the next hop
     }
@@ -498,7 +559,7 @@ export async function unshorten(url: string): Promise<UnshortenChainResult> {
 
   // after following hops, current may now be terminal
   if (current !== url && isFinalHost(current)) {
-    return { ok: true, originalUrl: url, resolvedUrl: current, host: extractHost(current), method, chain };
+    return finalize(url, current, method, chain);
   }
 
   return { ...base, method, note: note || "no direct link found (likely captcha-gated)", chain };
