@@ -121,9 +121,11 @@ interface FlixServer {
 
 /** A deduped server option exposed to the watch page. */
 export interface AnimelokServer {
-  name: string; // "HD-1" | "HD-2" | "AniStream" | "VidMaster" | "AniPlay" | "Abyess"
-  type: "sub" | "dub";
+  name: string; // "HD-1" | "HD-2"
+  type: "multi"; // flixcloud streams are multi-audio (Japanese + English)
   embedUrl: string; // iframe embed URL (plays on the user's IP)
+  /** Audio tracks available inside this stream (switchable via player 🎧). */
+  audioTracks: string[];
 }
 
 /** Fetch flixcloud server list for an episode via Animelok's API. */
@@ -134,79 +136,34 @@ async function getFlixServers(anilistId: number, episode: number): Promise<FlixS
 }
 
 /**
- * Build the static server list from Animelok's own client-side code (reverse-
- * engineered from its JS bundle). These are iframe embed URLs keyed to the
- * AniList id + episode number; sub = Japanese, dub = English.
+ * Return the deduped server options for an episode.
  *
- * NOTE: AniStream / VidMaster / AniPlay are intentionally disabled for now —
- * kept here (commented) so they can be re-enabled easily later.
- */
-function buildStaticServers(anilistId: number, episode: number): AnimelokServer[] {
-  const _disabled = [
-    {
-      name: "AniStream",
-      type: "sub" as const,
-      embedUrl: `https://megaplay.buzz/stream/ani/${anilistId}/${episode}/sub?autostart=true`,
-    },
-    {
-      name: "AniStream",
-      type: "dub" as const,
-      embedUrl: `https://megaplay.buzz/stream/ani/${anilistId}/${episode}/dub?autostart=true`,
-    },
-    {
-      name: "VidMaster",
-      type: "sub" as const,
-      embedUrl: `https://vidnest.fun/animepahe/${anilistId}/${episode}/sub`,
-    },
-    {
-      name: "VidMaster",
-      type: "dub" as const,
-      embedUrl: `https://vidnest.fun/animepahe/${anilistId}/${episode}/dub`,
-    },
-    {
-      name: "AniPlay",
-      type: "sub" as const,
-      embedUrl: `https://player.videasy.net/anime/${anilistId}/${episode}?autoplay=true`,
-    },
-    {
-      name: "AniPlay",
-      type: "dub" as const,
-      embedUrl: `https://player.videasy.net/anime/${anilistId}/${episode}?autoplay=true`,
-    },
-  ];
-  // Disabled for now — return empty so only flixcloud HD-1/HD-2 are shown.
-  void _disabled;
-  return [];
-}
-
-/**
- * Return the deduped server options for an episode: flixcloud HD-1/HD-2 plus
- * AniStream / VidMaster / AniPlay (all sub + dub), each as an iframe embed URL.
+ * flixcloud's `sub` and `dub` entries share the SAME dataLink — the stream is
+ * multi-audio (Japanese + English), switched inside the player via the 🎧
+ * button. We therefore expose one server per host (HD-1 / HD-2) rather than
+ * fake sub/dub duplicates, and list the audio tracks explicitly.
  */
 export async function listAnimelokServers(
   anilistId: number,
   episode: number
 ): Promise<AnimelokServer[]> {
   const flixServers = await getFlixServers(anilistId, episode);
-  const staticServers = buildStaticServers(anilistId, episode);
 
   const seen = new Set<string>();
   const out: AnimelokServer[] = [];
   for (const s of flixServers) {
-    const type = s.dataType === "dub" ? "dub" : "sub";
-    const key = `${s.serverName}:${type}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push({ name: s.serverName, type, embedUrl: s.dataLink });
-  }
-  for (const s of staticServers) {
-    const key = `${s.name}:${s.type}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(s);
+    if (seen.has(s.serverName)) continue;
+    seen.add(s.serverName);
+    out.push({
+      name: s.serverName,
+      type: "multi",
+      embedUrl: s.dataLink,
+      audioTracks: ["Japanese", "English"],
+    });
   }
 
-  return out;
+  // HD-2 (v=2) before HD-1
+  return out.sort((a, b) => (a.name === "HD-2" ? -1 : 1));
 }
 
 /** Pull access_id + v out of a flixcloud dataLink (…/e/{id}?v={1|2}). */

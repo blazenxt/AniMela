@@ -8,8 +8,9 @@ import { PlayIcon, StarIcon } from "./Icons";
 
 interface Server {
   name: string;
-  type: "sub" | "dub";
+  type: "multi";
   embedUrl: string;
+  audioTracks: string[];
 }
 
 interface Language {
@@ -42,7 +43,6 @@ export default function AnimeWatch({
   const [languages, setLanguages] = useState<Language[]>([]);
   const [episode, setEpisode] = useState<number>(Number(sp.get("ep")) || 1);
   const [server, setServer] = useState<Server | null>(null);
-  const [audio, setAudio] = useState<"sub" | "dub">("sub");
   const [started, setStarted] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadingServer, setLoadingServer] = useState(false);
@@ -81,9 +81,7 @@ export default function AnimeWatch({
         const d = await api.animeServers(anilistId, ep);
         setServers(d.servers || []);
         setLanguages(d.languages || []);
-        // pick the first server matching the current audio (sub/dub) preference
-        const match = d.servers?.find((s) => s.type === audio) || d.servers?.[0] || null;
-        setServer(match);
+        setServer(d.servers?.[0] || null);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Failed to load servers");
         setServers([]);
@@ -92,13 +90,13 @@ export default function AnimeWatch({
         setLoading(false);
       }
     },
-    [anilistId, audio]
+    [anilistId]
   );
 
   useEffect(() => {
     loadServers(episode);
     router.replace(`/anime/${anilistId}/watch?ep=${episode}`, { scroll: false });
-  }, [episode, loadServers, anilistId, router, audio]);
+  }, [episode, loadServers, anilistId, router]);
 
   const pickServer = (s: Server) => {
     setServer(s);
@@ -155,7 +153,7 @@ export default function AnimeWatch({
               </span>
               <span className="font-semibold text-zinc-100">
                 Play Episode {episode}
-                {server ? ` · ${server.name} ${server.type.toUpperCase()}` : ""}
+                {server ? ` · ${server.name}` : ""}
               </span>
             </button>
           )
@@ -181,23 +179,24 @@ export default function AnimeWatch({
         <span className="text-zinc-500">If a source fails, switch server below.</span>
       </div>
 
-      {/* audio language selector (Japanese = sub, English = dub) */}
-      <div className="mt-4">
-        <h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-zinc-400">Audio language</h3>
-        <div className="flex flex-wrap gap-2">
-          {(["sub", "dub"] as const).map((t) => (
-            <button
+      {/* audio tracks (multi-audio stream — switch via player 🎧) */}
+      <div className="mt-4 rounded-xl bg-white/5 p-3 ring-1 ring-white/10">
+        <div className="flex items-center gap-2">
+          <span className="text-base">🎧</span>
+          <span className="text-sm font-semibold text-zinc-200">Audio</span>
+        </div>
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {(server?.audioTracks?.length ? server.audioTracks : ["Japanese", "English"]).map((t) => (
+            <span
               key={t}
-              onClick={() => setAudio(t)}
-              className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${
-                audio === t
-                  ? "bg-purple-600 text-white"
-                  : "bg-white/5 text-zinc-300 ring-1 ring-white/10 hover:bg-white/10"
-              }`}
+              className="rounded-md bg-purple-600/15 px-2.5 py-1 text-xs font-semibold text-purple-300 ring-1 ring-purple-500/30"
             >
-              {t === "sub" ? "Japanese (Sub)" : "English (Dub)"}
-            </button>
+              {t}
+            </span>
           ))}
+          <span className="rounded-md bg-white/5 px-2.5 py-1 text-xs text-zinc-400 ring-1 ring-white/10">
+            Switch using the headphones (🎧) button inside the player
+          </span>
         </div>
         {languages.length > 0 && (
           <div className="mt-2 flex flex-wrap gap-1.5">
@@ -214,32 +213,28 @@ export default function AnimeWatch({
         )}
       </div>
 
-      {/* server selector (filtered by chosen audio language) */}
+      {/* server selector */}
       {servers.length > 0 && (
         <div className="mt-4">
-          <h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-zinc-400">
-            Servers {`(${audio.toUpperCase()})`}
-          </h3>
+          <h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-zinc-400">Servers</h3>
           <div className="flex flex-wrap gap-2">
-            {servers
-              .filter((s) => s.type === audio)
-              .map((s) => {
-                const key = `${s.name}-${s.type}`;
-                const active = server?.name === s.name && server?.type === s.type;
-                return (
-                  <button
-                    key={key}
-                    onClick={() => pickServer(s)}
-                    className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition ${
-                      active
-                        ? "bg-white/15 text-white ring-1 ring-white/30"
-                        : "bg-white/5 text-zinc-300 ring-1 ring-white/10 hover:bg-white/10"
-                    }`}
-                  >
-                    {s.name}
-                  </button>
-                );
-              })}
+            {servers.map((s) => {
+              const key = s.name;
+              const active = server?.name === s.name;
+              return (
+                <button
+                  key={key}
+                  onClick={() => pickServer(s)}
+                  className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${
+                    active
+                      ? "bg-white/15 text-white ring-1 ring-white/30"
+                      : "bg-white/5 text-zinc-300 ring-1 ring-white/10 hover:bg-white/10"
+                  }`}
+                >
+                  {s.name}
+                </button>
+              );
+            })}
           </div>
         </div>
       )}
