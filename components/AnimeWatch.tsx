@@ -4,16 +4,12 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { api, AnimeEpisode } from "@/lib/api";
-import CustomPlayer, { Source } from "./CustomPlayer";
 import { PlayIcon, StarIcon } from "./Icons";
 
 interface Server {
   name: string;
-  type: "sub" | "dub" | "multi";
-  embedUrl?: string;
-  streamUrl?: string;
-  referer?: string;
-  qualities?: { quality: string; url: string }[];
+  type: "sub" | "dub";
+  embedUrl: string;
 }
 
 interface Language {
@@ -46,7 +42,6 @@ export default function AnimeWatch({
   const [languages, setLanguages] = useState<Language[]>([]);
   const [episode, setEpisode] = useState<number>(Number(sp.get("ep")) || 1);
   const [server, setServer] = useState<Server | null>(null);
-  const [sources, setSources] = useState<Source[]>([]);
   const [started, setStarted] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadingServer, setLoadingServer] = useState(false);
@@ -75,41 +70,26 @@ export default function AnimeWatch({
     };
   }, [anilistId]);
 
-  // build CustomPlayer sources for a "multi" (direct m3u8) server
-  const buildSources = useCallback((s: Server | null): Source[] => {
-    if (!s || s.type !== "multi" || !s.streamUrl) return [];
-    const proxy = (url: string) =>
-      `/api/hls?url=${encodeURIComponent(url)}&referer=${encodeURIComponent(s.referer || "")}`;
-    if (s.qualities && s.qualities.length) {
-      return s.qualities.map((q) => ({ quality: q.quality, url: proxy(q.url) }));
-    }
-    return [{ quality: "auto", url: proxy(s.streamUrl) }];
-  }, []);
-
   // load servers + languages per episode
   const loadServers = useCallback(
     async (ep: number) => {
       setLoading(true);
       setError(null);
       setStarted(false);
-      setSources([]);
       try {
         const d = await api.animeServers(anilistId, ep);
         setServers(d.servers || []);
         setLanguages(d.languages || []);
-        const def = d.servers?.[0] || null;
-        setServer(def);
-        setSources(buildSources(def));
+        setServer(d.servers?.[0] || null);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Failed to load servers");
         setServers([]);
         setServer(null);
-        setSources([]);
       } finally {
         setLoading(false);
       }
     },
-    [anilistId, buildSources]
+    [anilistId]
   );
 
   useEffect(() => {
@@ -120,7 +100,6 @@ export default function AnimeWatch({
   const pickServer = (s: Server) => {
     setServer(s);
     setStarted(false);
-    setSources(buildSources(s));
   };
 
   const gotoEpisode = (n: number) => {
@@ -153,12 +132,7 @@ export default function AnimeWatch({
         className="relative w-full overflow-hidden rounded-2xl bg-black ring-1 ring-white/10"
         style={{ aspectRatio: "16 / 9" }}
       >
-        {server && sources.length > 0 ? (
-          // direct stream (Multi server) via CustomPlayer
-          <div className="absolute inset-0">
-            <CustomPlayer sources={sources} />
-          </div>
-        ) : server && server.embedUrl ? (
+        {server ? (
           started ? (
             <iframe
               key={`${server.embedUrl}:${episode}`}
@@ -235,7 +209,6 @@ export default function AnimeWatch({
             {servers.map((s) => {
               const key = `${s.name}-${s.type}`;
               const active = server?.name === s.name && server?.type === s.type;
-              const label = s.type === "multi" ? `${s.name} (Regional Dubs)` : `${s.name} · ${s.type.toUpperCase()}`;
               return (
                 <button
                   key={key}
@@ -246,7 +219,7 @@ export default function AnimeWatch({
                       : "bg-white/5 text-zinc-300 ring-1 ring-white/10 hover:bg-white/10"
                   }`}
                 >
-                  {label}
+                  {s.name} · {s.type.toUpperCase()}
                 </button>
               );
             })}
