@@ -50,9 +50,19 @@ export default function AnimePlayer({ anilistId, title }: { anilistId: number | 
       try {
         const d = await api.animeStream(anilistId, ep.number, useDub);
         if (d.available && d.sources?.length) {
-          setSources(d.sources.map((s) => ({ quality: s.quality, url: s.url })));
+          const referer = (d.headers as Record<string, string> | undefined)?.Referer || "";
+          // IP-bound / Cloudflare-protected sources (flixcloud via Animelok) must
+          // go through our same-origin HLS proxy so the browser never hits the
+          // protected host directly.
+          const proxied = d.sources.map((s) => ({
+            quality: s.quality,
+            url: referer
+              ? `/api/hls?url=${encodeURIComponent(s.url)}&referer=${encodeURIComponent(referer)}`
+              : s.url,
+          }));
+          setSources(proxied);
           setSubtitles(d.subtitles || []);
-          setHeaders(d.headers || {});
+          setHeaders({});
           setProvider((d.provider as string) || "");
         } else {
           setStreamError("No playable source found for this episode.");
