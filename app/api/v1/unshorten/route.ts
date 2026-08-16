@@ -5,6 +5,22 @@ import { ok, fail, options } from "@/lib/api-response";
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
+/** Reject SSRF targets (mirrors lib/shortener.ts). */
+function isPrivateHost(hostname: string): boolean {
+  const h = hostname.toLowerCase();
+  if (h === "localhost" || h === "metadata.google.internal" || h.endsWith(".internal")) return true;
+  if (h === "::1" || h === "0.0.0.0") return true;
+  const ipv4 = h.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (ipv4) {
+    const [a, b] = [Number(ipv4[1]), Number(ipv4[2])];
+    if (a === 127 || a === 10 || a === 0) return true;
+    if (a === 172 && b >= 16 && b <= 31) return true;
+    if (a === 192 && b === 168) return true;
+    if (a === 169 && b === 254) return true;
+  }
+  return false;
+}
+
 /**
  * GET /api/v1/unshorten?url=...
  *
@@ -25,6 +41,15 @@ export async function GET(req: NextRequest) {
   // so we can build a dedicated handler for a new protector.
   if (sp.get("dump") === "1") {
     try {
+      let u: URL;
+      try {
+        u = new URL(url);
+      } catch {
+        return fail(400, "invalid url");
+      }
+      if (u.protocol !== "https:" && u.protocol !== "http:") return fail(400, "bad protocol");
+      if (isPrivateHost(u.hostname)) return fail(403, "host not allowed");
+
       const res = await fetch(url, {
         headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/126.0" },
         signal: AbortSignal.timeout(15000),
