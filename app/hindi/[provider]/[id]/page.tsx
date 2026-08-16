@@ -126,16 +126,6 @@ export default function HindiMoviePage({
               </div>
             </div>
           )}
-
-          <a
-            href={data.link}
-            target="_blank"
-            rel="noreferrer nofollow"
-            className="mt-6 inline-flex items-center gap-2 rounded-xl bg-violet-400/10 px-4 py-2.5 text-sm font-semibold text-violet-300 ring-1 ring-violet-400/20 transition hover:bg-violet-400/20"
-          >
-            View original page
-            <ExternalLinkIcon className="h-4 w-4" />
-          </a>
         </div>
       </div>
     </div>
