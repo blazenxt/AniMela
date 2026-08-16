@@ -95,13 +95,26 @@ export default function AnimePlayer({ anilistId, title }: { anilistId: number | 
                 <div className="h-10 w-10 animate-spin rounded-full border-2 border-white/20 border-t-white" />
                 <p className="text-sm text-zinc-400">Resolving stream…</p>
               </>
+            ) : state.error ? (
+              <>
+                <p className="font-semibold text-zinc-200">Couldn’t load episodes</p>
+                <p className="text-sm text-zinc-500">{state.error}</p>
+              </>
+            ) : !state.available ? (
+              <>
+                <p className="font-semibold text-zinc-200">Streaming temporarily unavailable</p>
+                <p className="max-w-md text-sm text-zinc-500">
+                  No working source is available for this title right now. You can still browse
+                  details, studios and ratings above, or watch it on AniList / MyAnimeList.
+                </p>
+              </>
             ) : (
               <>
                 <p className="font-semibold text-zinc-200">
-                  {state.error || streamError || (episode ? "No source available" : `Select an episode to watch ${title}`)}
+                  {streamError || (episode ? "No source available" : `Select an episode to watch ${title}`)}
                 </p>
                 <p className="text-sm text-zinc-500">
-                  {state.error || streamError
+                  {streamError
                     ? "Try another episode or toggle Sub/Dub."
                     : episode
                       ? "This episode has no playable source right now."

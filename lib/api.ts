@@ -186,8 +186,11 @@ export const api = {
   genreList: (kind: Kind) => request(`${BASE}/api/tmdb/genre/${kind}/list`),
   discover: (kind: Kind, genreId: number | string, page = 1) =>
     request(`${BASE}/api/tmdb/discover/${kind}?with_genres=${genreId}&page=${page}`),
+  // NOTE: cinezo's `/similar` returns a popularity-sorted list (unrelated
+  // titles), while `/recommendations` returns actually-relevant movies — so we
+  // use recommendations for the "More like this" row.
   similar: (kind: Kind, id: number | string, page = 1) =>
-    request(`${BASE}/api/tmdb/${kind}/${id}/similar?page=${page}`),
+    request(`${BASE}/api/tmdb/${kind}/${id}/recommendations?page=${page}`),
   credits: (kind: Kind, id: number | string) => request(`${BASE}/api/tmdb/${kind}/${id}/credits`),
   topRatedTv: (page = 1) => request(`${BASE}/api/tmdb/tv/top_rated?page=${page}`),
   topRatedMovies: (page = 1) => request(`${BASE}/api/tmdb/movie/top_rated?page=${page}`),
