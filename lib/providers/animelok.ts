@@ -184,21 +184,20 @@ export async function listAnimelokLanguages(ref: AnimeRef): Promise<AnimelokLang
   const html = await getHtml(`/anime/${resolved.id}`);
   const languages: AnimelokLanguage[] = [];
 
-  // "Languages: JAPANESE ENGLISH HINDI TELUGU TAMIL MALAYALAM KANNADA"
-  const langBlock = html.match(/Languages\s*:\s*([A-Z ]{2,})/i);
-  if (langBlock) {
-    const names = langBlock[1].trim().split(/\s+/).filter(Boolean);
-    for (const n of names) {
-      const label = n.charAt(0) + n.slice(1).toLowerCase();
-      if (!languages.some((l) => l.label === label)) {
-        languages.push({ code: label.toLowerCase(), label });
-      }
+  // Languages appear as links: <a href="/languages/hindi">HINDI</a>
+  const linkRe = /href="\/languages\/([a-z]+)"[^>]*>([A-Za-z]+)<\/a>/gi;
+  let lm: RegExpExecArray | null;
+  while ((lm = linkRe.exec(html)) !== null) {
+    const code = lm[1].toLowerCase();
+    const label = lm[2].charAt(0) + lm[2].slice(1).toLowerCase();
+    if (!languages.some((l) => l.code === code)) {
+      languages.push({ code, label });
     }
   }
 
   // episode counts per language, e.g. "HIN- 199 TAM- 198 TEL- 199 JAP- 1173"
   const countMap: Record<string, number> = {};
-  const countRe = /\b(HIN|TAM|TEL|ENG|KAN|JAP|MAL)\s*-\s*(\d+)\b/g;
+  const countRe = /\b(HIN|TAM|TEL|ENG|KAN|JAP|MAL|BEN)\s*-\s*(\d+)\b/g;
   let cm: RegExpExecArray | null;
   while ((cm = countRe.exec(html)) !== null) {
     countMap[cm[1]] = Number(cm[2]);
