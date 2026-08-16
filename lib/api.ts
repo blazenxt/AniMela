@@ -221,7 +221,7 @@ export const api = {
     id: number | string,
     episode: number,
     dub = false
-  ): Promise<{ available: boolean; sources?: AnimeStreamSource[]; subtitles?: { url: string; lang: string }[]; headers?: Record<string, string> } & Record<string, unknown>> =>
+  ): Promise<{ available: boolean; sources?: AnimeStreamSource[]; subtitles?: { url: string; lang: string }[]; headers?: Record<string, string>; embedUrl?: string; provider?: string; server?: string } & Record<string, unknown>> =>
     fetchV1(`/anime/${id}/stream?ep=${episode}&dub=${dub ? 1 : 0}`),
 
   // ── Hindi / Desi movies (download-oriented providers) ─────────────────

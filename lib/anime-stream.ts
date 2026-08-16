@@ -33,6 +33,13 @@ export interface StreamResult {
   subtitles: { url: string; lang: string }[];
   /** Referer/Origin required by some CDNs — forwarded to the player's HLS loader. */
   headers?: Record<string, string>;
+  /**
+   * Optional embeddable player URL (e.g. flixcloud.cc/e/{id}?v=1). Used when the
+   * direct stream is IP-bound/Cloudflare-blocked from a datacenter host: the
+   * embed runs in the *user's* browser with their own (residential) IP, so it
+   * plays even when our server can't fetch the stream itself.
+   */
+  embedUrl?: string;
 }
 
 /** Minimal reference used to locate an anime across providers. */
@@ -150,7 +157,7 @@ export async function resolveEpisode(
       continue;
     }
     const result = await attempt(p, () => p.resolveEpisode(ref, episode, dub), errors);
-    if (result && result.sources.length) return { result, errors };
+    if (result && (result.sources.length || result.embedUrl)) return { result, errors };
   }
   return { result: null, errors };
 }

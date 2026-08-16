@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, AnimeEpisode } from "@/lib/api";
 import CustomPlayer, { Source } from "./CustomPlayer";
+import { PlayIcon } from "./Icons";
 
 interface State {
   episodes: AnimeEpisode[];
@@ -21,9 +22,11 @@ export default function AnimePlayer({ anilistId, title }: { anilistId: number | 
   const [dub, setDub] = useState(false);
   const [episode, setEpisode] = useState<AnimeEpisode | null>(null);
   const [sources, setSources] = useState<Source[]>([]);
+  const [embedUrl, setEmbedUrl] = useState<string | null>(null);
   const [subtitles, setSubtitles] = useState<{ url: string; lang: string }[]>([]);
   const [headers, setHeaders] = useState<Record<string, string>>({});
   const [provider, setProvider] = useState("");
+  const [started, setStarted] = useState(false);
   const [loadingStream, setLoadingStream] = useState(false);
   const [streamError, setStreamError] = useState<string | null>(null);
 
@@ -45,25 +48,37 @@ export default function AnimePlayer({ anilistId, title }: { anilistId: number | 
     async (ep: AnimeEpisode, useDub: boolean) => {
       setEpisode(ep);
       setSources([]);
+      setEmbedUrl(null);
+      setStarted(false);
       setStreamError(null);
       setLoadingStream(true);
       try {
         const d = await api.animeStream(anilistId, ep.number, useDub);
-        if (d.available && d.sources?.length) {
-          const referer = (d.headers as Record<string, string> | undefined)?.Referer || "";
-          // IP-bound / Cloudflare-protected sources (flixcloud via Animelok) must
-          // go through our same-origin HLS proxy so the browser never hits the
-          // protected host directly.
-          const proxied = d.sources.map((s) => ({
-            quality: s.quality,
-            url: referer
-              ? `/api/hls?url=${encodeURIComponent(s.url)}&referer=${encodeURIComponent(referer)}`
-              : s.url,
-          }));
-          setSources(proxied);
-          setSubtitles(d.subtitles || []);
-          setHeaders({});
+        if (d.available) {
           setProvider((d.provider as string) || "");
+
+          if (d.sources?.length) {
+            const referer = (d.headers as Record<string, string> | undefined)?.Referer || "";
+            // IP-bound / Cloudflare-protected sources (flixcloud via Animelok) must
+            // go through our same-origin HLS proxy so the browser never hits the
+            // protected host directly.
+            const proxied = d.sources.map((s) => ({
+              quality: s.quality,
+              url: referer
+                ? `/api/hls?url=${encodeURIComponent(s.url)}&referer=${encodeURIComponent(referer)}`
+                : s.url,
+            }));
+            setSources(proxied);
+            setSubtitles(d.subtitles || []);
+            setHeaders({});
+          } else if (d.embedUrl) {
+            // Direct stream is IP-bound to our (datacenter) IP → embed the
+            // source's own player, which decrypts/streams using the *user's*
+            // residential IP. This is what makes playback work for free.
+            setEmbedUrl(d.embedUrl as string);
+          } else {
+            setStreamError("No playable source found for this episode.");
+          }
         } else {
           setStreamError("No playable source found for this episode.");
         }
@@ -98,6 +113,27 @@ export default function AnimePlayer({ anilistId, title }: { anilistId: number | 
           <div className="absolute inset-0">
             <CustomPlayer sources={sources} headers={headers} subtitles={subtitles} />
           </div>
+        ) : embedUrl ? (
+          started ? (
+            <iframe
+              key={embedUrl}
+              src={embedUrl}
+              allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
+              allowFullScreen
+              className="absolute inset-0 h-full w-full border-0"
+              title="Anime player"
+            />
+          ) : (
+            <button
+              onClick={() => setStarted(true)}
+              className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-3"
+            >
+              <span className="flex h-16 w-16 items-center justify-center rounded-full bg-purple-600/90 shadow-lg shadow-purple-900/50 transition hover:scale-105">
+                <PlayIcon className="h-8 w-8 text-white" />
+              </span>
+              <span className="text-sm font-semibold text-zinc-200">Click to play</span>
+            </button>
+          )
         ) : (
           <div className="flex h-full w-full flex-col items-center justify-center gap-2 px-6 text-center">
             {loadingStream ? (
@@ -137,7 +173,7 @@ export default function AnimePlayer({ anilistId, title }: { anilistId: number | 
       </div>
 
       {/* status bar */}
-      {provider && sources.length > 0 && (
+      {provider && (sources.length > 0 || embedUrl) && (
         <div className="flex items-center gap-2 text-xs font-semibold text-emerald-300">
           <span className="h-2 w-2 rounded-full bg-emerald-400" />
           Playing via {provider}

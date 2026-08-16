@@ -197,10 +197,29 @@ export const AnimelokProvider: StreamProvider = {
           sources: [{ url: decrypted.url, quality: "default", isM3U8: true }],
           subtitles: decrypted.subtitles.map((t) => ({ url: t.url, lang: t.language })),
           headers: { Referer: `${BASE}/` },
+          // Always include the embed fallback: the direct stream is IP-bound to
+          // our (datacenter) IP and its CDN Cloudflare-blocks datacenter hosts,
+          // so the player embeds this URL instead and flixcloud's own player
+          // decrypts/streams using the *user's* (residential) IP.
+          embedUrl: sorted[0]?.dataLink,
         };
       } catch {
         // try next server
       }
+    }
+
+    // No direct stream decryptable → still return the embed fallback so the
+    // player can show the flixcloud iframe (plays fine from a user's IP).
+    if (sorted[0]?.dataLink) {
+      return {
+        provider: "animelok",
+        server: sorted[0].serverName,
+        subOrDub: sorted[0].dataType === "dub" ? "dub" : "sub",
+        sources: [],
+        subtitles: [],
+        headers: { Referer: `${BASE}/` },
+        embedUrl: sorted[0].dataLink,
+      };
     }
 
     // Fallback: old watch-page m3u8 extraction (rarely present server-side).
