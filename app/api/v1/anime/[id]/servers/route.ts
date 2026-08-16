@@ -52,24 +52,21 @@ export async function GET(
         { headers: ua, signal: AbortSignal.timeout(15000) }
       )).text();
 
-      // extract all URLs + server-like tokens
-      const urls = [...watchHtml.matchAll(/https?:\/\/[^\s"'<>\\]+/gi)].map((m) => m[0]);
-      const iframes = [...watchHtml.matchAll(/<iframe[^>]*src=["']([^"']+)["']/gi)].map((m) => m[1]);
-      // look for server names with nearby data
-      const serverCtx: string[] = [];
-      for (const name of ["Multi", "Abyess", "AniStream", "VidMaster", "AniPlay", "HD-1", "HD-2"]) {
-        let idx = watchHtml.indexOf(name);
-        while (idx !== -1 && serverCtx.length < 40) {
-          serverCtx.push(name + " → " + watchHtml.slice(idx, idx + 200).replace(/\s+/g, " "));
-          idx = watchHtml.indexOf(name, idx + 1);
-        }
+      // scan JS chunks for API endpoints + server keywords
+      const chunks = [...watchHtml.matchAll(/src="(\/_next\/static\/chunks\/[^"]+\.js)"/g)].map((m) => m[1]);
+      const found = new Set<string>();
+      for (const c of chunks.slice(0, 40)) {
+        try {
+          const js = await (await fetch(`${BASE}${c}`, { headers: ua, signal: AbortSignal.timeout(15000) })).text();
+          for (const m of js.matchAll(/\/api\/[a-zA-Z0-9_\-\/]{2,40}/g)) found.add("api:" + m[0]);
+          for (const m of js.matchAll(/["'`](?:flixcloud|megacloud|abyss|anistream|vidmaster|aniplay|multi)[a-zA-Z0-9_\-\/.]*["'`]/gi)) found.add("kw:" + m[0]);
+          for (const m of js.matchAll(/\/e\/[a-zA-Z0-9]+\?v=\d+/g)) found.add("embed:" + m[0]);
+        } catch { /* skip */ }
       }
       return ok({
         hexId,
-        urls: urls.filter((u) => !/\.(png|jpg|jpeg|webp|gif|svg|css|js|ico)/i.test(u)).slice(0, 60),
-        iframes: iframes.slice(0, 30),
-        serverCtx: serverCtx.slice(0, 30),
-        hasNextData: /__NEXT_DATA__/.test(watchHtml),
+        chunkCount: chunks.length,
+        found: [...found].slice(0, 80),
         len: watchHtml.length,
       });
     }
