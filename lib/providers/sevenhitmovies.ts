@@ -26,12 +26,20 @@ const TIMEOUT_MS = 10000;
 const SPAM_CATEGORY_IDS = [50, 51, 52, 53, 54, 55, 56]; // Blog, Education, Sports, Health, Entertainment, Technology, Business
 const SPAM_EXCLUDE = SPAM_CATEGORY_IDS.join(",");
 
-/** Movie/series signal words — a second layer of defense (title-based). */
+/**
+ * Strong movie/series signals — a second layer of defense (title-based).
+ *
+ * NOTE: language words (Hindi, Tamil, Punjabi…) are deliberately NOT standalone
+ * signals — they appear in blog articles too (e.g. "…in Pakistani Dramas").
+ * A real movie/series post on this site always carries at least one of:
+ *   - a 4-digit year, OR
+ *   - a quality token (1080p / BluRay / HDRip / HEVC / ESubs…), OR
+ *   - a format word (Movie / Series / Season / Episode / Dual Audio…).
+ */
 const MOVIE_SIGNALS = [
-  /\(\d{4}\)/, // year in parens
-  /\b(1080p|720p|480p|2160p|4k|bluray|hdrip|webrip|web-dl|camrip|hdtc|hevc|x264|x265|esubs|org)\b/i,
-  /\b(movie|movies|film|dual audio|dubbed|dub|web series|series|season|episode|s\d{2}|e\d{2})\b/i,
-  /\b(hindi|bollywood|hollywood|tamil|telugu|punjabi|malayalam|kannada|marathi|gujarati|urdu|pakistani|bengali|south)\b/i,
+  /\b(19|20)\d{2}\b/, // any 4-digit year
+  /\b(1080p|720p|480p|2160p|4k|uhd|hd|bluray|hdrip|webrip|web-dl|camrip|hdtc|hevc|x264|x265|esubs|org|ds4k)\b/i,
+  /\b(movie|movies|film|dual audio|dubbed|dub|web series|series|season|episode|s\d{2}e\d{2}|s\d{2}|e\d{2}|complete)\b/i,
 ];
 
 /** True if a post title looks like an actual movie / web series. */
