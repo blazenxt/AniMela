@@ -79,6 +79,11 @@ export async function GET(
       });
     }
 
+    const [servers, languages] = await Promise.all([
+      listAnimelokServers(detail.id, ep),
+      listAnimelokLanguages(ref),
+    ]);
+
     return ok({ available: servers.length > 0, servers, languages });
   } catch (e) {
     return fail(502, e instanceof Error ? e.message : "Upstream error");
