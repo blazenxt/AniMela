@@ -42,7 +42,6 @@ export default function AnimeWatch({
   const [languages, setLanguages] = useState<Language[]>([]);
   const [episode, setEpisode] = useState<number>(Number(sp.get("ep")) || 1);
   const [server, setServer] = useState<Server | null>(null);
-  const [language, setLanguage] = useState<string>("");
   const [started, setStarted] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadingServer, setLoadingServer] = useState(false);
@@ -91,10 +90,6 @@ export default function AnimeWatch({
   const pickServer = (s: Server) => {
     setServer(s);
     setStarted(false);
-  };
-
-  const pickLanguage = (lang: string) => {
-    setLanguage(lang);
   };
 
   const gotoEpisode = (n: number) => {
@@ -173,28 +168,28 @@ export default function AnimeWatch({
         <span className="text-zinc-500">If a source fails, switch server below.</span>
       </div>
 
-      {/* language selector */}
-      {languages.length > 0 && (
-        <div className="mt-4">
-          <h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-zinc-400">Audio language</h3>
-          <div className="flex flex-wrap gap-2">
+      {/* audio-language hint — the actual switch is the player's own 🎧 button */}
+      <div className="mt-4 rounded-xl bg-white/5 p-3 ring-1 ring-white/10">
+        <div className="flex items-center gap-2">
+          <span className="text-base">🎧</span>
+          <span className="text-sm font-semibold text-zinc-200">
+            Audio / language switch karne ke liye player ke andar headphones (🎧) button dabao
+          </span>
+        </div>
+        {languages.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1.5">
             {languages.map((l) => (
-              <button
+              <span
                 key={l.code}
-                onClick={() => pickLanguage(l.code)}
-                className={`rounded-lg px-3 py-1.5 text-sm font-semibold transition ${
-                  language === l.code
-                    ? "bg-purple-600 text-white"
-                    : "bg-white/5 text-zinc-300 ring-1 ring-white/10 hover:bg-white/10"
-                }`}
+                className="rounded-md bg-white/5 px-2 py-0.5 text-xs text-zinc-400 ring-1 ring-white/10"
               >
                 {l.label}
-                {l.episodes != null && <span className="ml-1 text-xs opacity-60">({l.episodes})</span>}
-              </button>
+                {l.episodes != null && <span className="ml-1 opacity-60">({l.episodes} eps)</span>}
+              </span>
             ))}
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* server selector */}
       {servers.length > 0 && (

@@ -37,27 +37,6 @@ export async function GET(
       format: detail.format ?? undefined,
     };
 
-    // debug: dump raw watch-page HTML to find ALL server dataLinks (Multi, Abyess, etc.)
-    if (new URL(req.url).searchParams.get("debug") === "1") {
-      const BASE = (process.env.ANIMELOK_BASE || "https://animelok.live").replace(/\/+$/, "");
-      const searchHtml = await (await fetch(
-        `${BASE}/search?keyword=${encodeURIComponent(detail.title)}`,
-        { headers: { "User-Agent": "Mozilla/5.0 Chrome/126.0" }, signal: AbortSignal.timeout(15000) }
-      )).text();
-      const idMatch = searchHtml.match(/href="\/anime\/([a-f0-9]{6,})"/i);
-      const hexId = idMatch?.[1] || "";
-      const watchHtml = await (await fetch(
-        `${BASE}/watch/${hexId}?ep=${ep}`,
-        { headers: { "User-Agent": "Mozilla/5.0 Chrome/126.0" }, signal: AbortSignal.timeout(15000) }
-      )).text();
-      return ok({
-        hexId,
-        dataLinks: (watchHtml.match(/https?:\/\/[^"'\s\\]+\/e\/[^"'\s\\]+/gi) || []).slice(0, 30),
-        serverNames: (watchHtml.match(/(?:HD-1|HD-2|AniStream|VidMaster|AniPlay|Multi|Abyess)[^"'\s<]{0,40}/gi) || []).slice(0, 40),
-        embedHints: (watchHtml.match(/flixcloud\.cc\/[^"'\s\\]*/gi) || []).slice(0, 20),
-      });
-    }
-
     const [servers, languages] = await Promise.all([
       listAnimelokServers(detail.id, ep),
       listAnimelokLanguages(ref),
