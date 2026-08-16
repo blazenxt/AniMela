@@ -20,7 +20,8 @@ export async function GET(
     return fail(400, "Invalid id — must be a numeric AniList id");
   }
 
-  const ep = Number(new URL(req.url).searchParams.get("ep"));
+  const sp = new URL(req.url).searchParams;
+  const ep = Number(sp.get("ep"));
   if (!Number.isInteger(ep) || ep < 1) {
     return fail(400, "Missing/invalid param: ep (1-based episode number)");
   }
@@ -36,6 +37,42 @@ export async function GET(
       year: detail.seasonYear ?? undefined,
       format: detail.format ?? undefined,
     };
+
+    // debug: dump raw watch-page HTML to discover ALL servers (Multi/Abyess/etc.)
+    if (sp.get("debug") === "1") {
+      const BASE = (process.env.ANIMELOK_BASE || "https://animelok.live").replace(/\/+$/, "");
+      const ua = { "User-Agent": "Mozilla/5.0 Chrome/126.0" };
+      const searchHtml = await (await fetch(
+        `${BASE}/search?keyword=${encodeURIComponent(detail.title)}`,
+        { headers: ua, signal: AbortSignal.timeout(15000) }
+      )).text();
+      const hexId = searchHtml.match(/href="\/anime\/([a-f0-9]{6,})"/i)?.[1] || "";
+      const watchHtml = await (await fetch(
+        `${BASE}/watch/${hexId}?ep=${ep}`,
+        { headers: ua, signal: AbortSignal.timeout(15000) }
+      )).text();
+
+      // extract all URLs + server-like tokens
+      const urls = [...watchHtml.matchAll(/https?:\/\/[^\s"'<>\\]+/gi)].map((m) => m[0]);
+      const iframes = [...watchHtml.matchAll(/<iframe[^>]*src=["']([^"']+)["']/gi)].map((m) => m[1]);
+      // look for server names with nearby data
+      const serverCtx: string[] = [];
+      for (const name of ["Multi", "Abyess", "AniStream", "VidMaster", "AniPlay", "HD-1", "HD-2"]) {
+        let idx = watchHtml.indexOf(name);
+        while (idx !== -1 && serverCtx.length < 40) {
+          serverCtx.push(name + " → " + watchHtml.slice(idx, idx + 200).replace(/\s+/g, " "));
+          idx = watchHtml.indexOf(name, idx + 1);
+        }
+      }
+      return ok({
+        hexId,
+        urls: urls.filter((u) => !/\.(png|jpg|jpeg|webp|gif|svg|css|js|ico)/i.test(u)).slice(0, 60),
+        iframes: iframes.slice(0, 30),
+        serverCtx: serverCtx.slice(0, 30),
+        hasNextData: /__NEXT_DATA__/.test(watchHtml),
+        len: watchHtml.length,
+      });
+    }
 
     const [servers, languages] = await Promise.all([
       listAnimelokServers(detail.id, ep),
