@@ -121,9 +121,9 @@ interface FlixServer {
 
 /** A deduped server option exposed to the watch page. */
 export interface AnimelokServer {
-  name: string; // "HD-1" | "HD-2"
+  name: string; // "HD-1" | "HD-2" | "AniStream" | "VidMaster" | "AniPlay" | "Abyess"
   type: "sub" | "dub";
-  embedUrl: string; // flixcloud dataLink (player iframe URL with 🎧 audio switch)
+  embedUrl: string; // iframe embed URL (plays on the user's IP)
 }
 
 /** Fetch flixcloud server list for an episode via Animelok's API. */
@@ -134,21 +134,55 @@ async function getFlixServers(anilistId: number, episode: number): Promise<FlixS
 }
 
 /**
- * Return the deduped server options (name + sub/dub) for an episode. Each maps
- * to a flixcloud embed URL that the watch page can iframe directly (the embed
- * plays on the user's IP and its player's 🎧 button switches audio languages).
- *
- * NOTE: Animelok's "Multi" server (regional dubs: Hindi/Tamil/Telugu) is served
- * via `/api/get-vibeplayer-data`, but that endpoint returns ad-segment playlists
- * (TikTok ad URLs) for non-authenticated clients — the real regional dubs are
- * gated behind Animelok's ad-challenge. We therefore only expose the flixcloud
- * servers, whose 🎧 audio switch is the genuinely free, working option.
+ * Build the static server list from Animelok's own client-side code (reverse-
+ * engineered from its JS bundle). These are iframe embed URLs keyed to the
+ * AniList id + episode number; sub = Japanese, dub = English.
+ */
+function buildStaticServers(anilistId: number, episode: number): AnimelokServer[] {
+  return [
+    {
+      name: "AniStream",
+      type: "sub",
+      embedUrl: `https://megaplay.buzz/stream/ani/${anilistId}/${episode}/sub?autostart=true`,
+    },
+    {
+      name: "AniStream",
+      type: "dub",
+      embedUrl: `https://megaplay.buzz/stream/ani/${anilistId}/${episode}/dub?autostart=true`,
+    },
+    {
+      name: "VidMaster",
+      type: "sub",
+      embedUrl: `https://vidnest.fun/animepahe/${anilistId}/${episode}/sub`,
+    },
+    {
+      name: "VidMaster",
+      type: "dub",
+      embedUrl: `https://vidnest.fun/animepahe/${anilistId}/${episode}/dub`,
+    },
+    {
+      name: "AniPlay",
+      type: "sub",
+      embedUrl: `https://player.videasy.net/anime/${anilistId}/${episode}?autoplay=true`,
+    },
+    {
+      name: "AniPlay",
+      type: "dub",
+      embedUrl: `https://player.videasy.net/anime/${anilistId}/${episode}?autoplay=true`,
+    },
+  ];
+}
+
+/**
+ * Return the deduped server options for an episode: flixcloud HD-1/HD-2 plus
+ * AniStream / VidMaster / AniPlay (all sub + dub), each as an iframe embed URL.
  */
 export async function listAnimelokServers(
   anilistId: number,
   episode: number
 ): Promise<AnimelokServer[]> {
   const flixServers = await getFlixServers(anilistId, episode);
+  const staticServers = buildStaticServers(anilistId, episode);
 
   const seen = new Set<string>();
   const out: AnimelokServer[] = [];
@@ -159,12 +193,14 @@ export async function listAnimelokServers(
     seen.add(key);
     out.push({ name: s.serverName, type, embedUrl: s.dataLink });
   }
+  for (const s of staticServers) {
+    const key = `${s.name}:${s.type}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(s);
+  }
 
-  // order: HD-2 before HD-1, sub before dub
-  return out.sort((a, b) => {
-    if (a.name !== b.name) return a.name === "HD-2" ? -1 : 1;
-    return a.type === "sub" ? -1 : 1;
-  });
+  return out;
 }
 
 /** Pull access_id + v out of a flixcloud dataLink (…/e/{id}?v={1|2}). */
