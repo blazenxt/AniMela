@@ -137,40 +137,46 @@ async function getFlixServers(anilistId: number, episode: number): Promise<FlixS
  * Build the static server list from Animelok's own client-side code (reverse-
  * engineered from its JS bundle). These are iframe embed URLs keyed to the
  * AniList id + episode number; sub = Japanese, dub = English.
+ *
+ * NOTE: AniStream / VidMaster / AniPlay are intentionally disabled for now —
+ * kept here (commented) so they can be re-enabled easily later.
  */
 function buildStaticServers(anilistId: number, episode: number): AnimelokServer[] {
-  return [
+  const _disabled = [
     {
       name: "AniStream",
-      type: "sub",
+      type: "sub" as const,
       embedUrl: `https://megaplay.buzz/stream/ani/${anilistId}/${episode}/sub?autostart=true`,
     },
     {
       name: "AniStream",
-      type: "dub",
+      type: "dub" as const,
       embedUrl: `https://megaplay.buzz/stream/ani/${anilistId}/${episode}/dub?autostart=true`,
     },
     {
       name: "VidMaster",
-      type: "sub",
+      type: "sub" as const,
       embedUrl: `https://vidnest.fun/animepahe/${anilistId}/${episode}/sub`,
     },
     {
       name: "VidMaster",
-      type: "dub",
+      type: "dub" as const,
       embedUrl: `https://vidnest.fun/animepahe/${anilistId}/${episode}/dub`,
     },
     {
       name: "AniPlay",
-      type: "sub",
+      type: "sub" as const,
       embedUrl: `https://player.videasy.net/anime/${anilistId}/${episode}?autoplay=true`,
     },
     {
       name: "AniPlay",
-      type: "dub",
+      type: "dub" as const,
       embedUrl: `https://player.videasy.net/anime/${anilistId}/${episode}?autoplay=true`,
     },
   ];
+  // Disabled for now — return empty so only flixcloud HD-1/HD-2 are shown.
+  void _disabled;
+  return [];
 }
 
 /**
