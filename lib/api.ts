@@ -228,7 +228,14 @@ export const api = {
     episode: number
   ): Promise<{
     available: boolean;
-    servers: { name: string; type: "sub" | "dub"; embedUrl: string }[];
+    servers: {
+      name: string;
+      type: "sub" | "dub" | "multi";
+      embedUrl?: string;
+      streamUrl?: string;
+      referer?: string;
+      qualities?: { quality: string; url: string }[];
+    }[];
     languages: { code: string; label: string; episodes?: number | null }[];
   }> => fetchV1(`/anime/${id}/servers?ep=${episode}`),
 

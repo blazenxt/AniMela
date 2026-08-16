@@ -38,39 +38,6 @@ export async function GET(
       format: detail.format ?? undefined,
     };
 
-    // debug: dump raw watch-page HTML to discover ALL servers (Multi/Abyess/etc.)
-    if (sp.get("debug") === "1") {
-      const BASE = (process.env.ANIMELOK_BASE || "https://animelok.live").replace(/\/+$/, "");
-      const ua = { "User-Agent": "Mozilla/5.0 Chrome/126.0" };
-      const searchHtml = await (await fetch(
-        `${BASE}/search?keyword=${encodeURIComponent(detail.title)}`,
-        { headers: ua, signal: AbortSignal.timeout(15000) }
-      )).text();
-      const hexId = searchHtml.match(/href="\/anime\/([a-f0-9]{6,})"/i)?.[1] || "";
-      const watchHtml = await (await fetch(
-        `${BASE}/watch/${hexId}?ep=${ep}`,
-        { headers: ua, signal: AbortSignal.timeout(15000) }
-      )).text();
-
-      // scan JS chunks for API endpoints + server keywords
-      const chunks = [...watchHtml.matchAll(/src="(\/_next\/static\/chunks\/[^"]+\.js)"/g)].map((m) => m[1]);
-      const found = new Set<string>();
-      for (const c of chunks.slice(0, 40)) {
-        try {
-          const js = await (await fetch(`${BASE}${c}`, { headers: ua, signal: AbortSignal.timeout(15000) })).text();
-          for (const m of js.matchAll(/\/api\/[a-zA-Z0-9_\-\/]{2,40}/g)) found.add("api:" + m[0]);
-          for (const m of js.matchAll(/["'`](?:flixcloud|megacloud|abyss|anistream|vidmaster|aniplay|multi)[a-zA-Z0-9_\-\/.]*["'`]/gi)) found.add("kw:" + m[0]);
-          for (const m of js.matchAll(/\/e\/[a-zA-Z0-9]+\?v=\d+/g)) found.add("embed:" + m[0]);
-        } catch { /* skip */ }
-      }
-      return ok({
-        hexId,
-        chunkCount: chunks.length,
-        found: [...found].slice(0, 80),
-        len: watchHtml.length,
-      });
-    }
-
     const [servers, languages] = await Promise.all([
       listAnimelokServers(detail.id, ep),
       listAnimelokLanguages(ref),

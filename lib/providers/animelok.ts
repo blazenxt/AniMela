@@ -121,9 +121,12 @@ interface FlixServer {
 
 /** A deduped server option exposed to the watch page. */
 export interface AnimelokServer {
-  name: string; // "HD-1" | "HD-2"
-  type: "sub" | "dub";
-  embedUrl: string; // flixcloud dataLink (player iframe URL)
+  name: string; // "HD-1" | "HD-2" | "Multi"
+  type: "sub" | "dub" | "multi";
+  embedUrl?: string; // flixcloud dataLink (player iframe URL)
+  streamUrl?: string; // direct m3u8 (vibeplayer / Multi server)
+  referer?: string; // required Referer for the direct stream
+  qualities?: { quality: string; url: string }[]; // parsed quality variants
 }
 
 /** Fetch flixcloud server list for an episode via Animelok's API. */
@@ -134,26 +137,82 @@ async function getFlixServers(anilistId: number, episode: number): Promise<FlixS
 }
 
 /**
- * Return the deduped server options (name + sub/dub) for an episode. Each maps
- * to a flixcloud embed URL that the watch page can iframe directly (the embed
- * plays on the user's IP and its own player exposes the 🎧 multi-audio switch).
+ * Fetch the "Multi" server (regional dubs: Hindi/Tamil/Telugu/etc.) via
+ * Animelok's vibe-player endpoint. Returns a direct master m3u8 + its quality
+ * variants + required Referer header.
+ */
+async function getVibeplayerServer(
+  anilistId: number,
+  episode: number
+): Promise<AnimelokServer | null> {
+  try {
+    const d = await getJson<any>(`/api/get-vibeplayer-data?anilistId=${anilistId}&epNum=${episode}`);
+    const master = d?.sources?.[0]?.url;
+    if (!master || !/\.m3u8($|\?)/i.test(master)) return null;
+
+    const referer = d?.headers?.Referer || "";
+
+    // Parse quality variants from the master playlist (360p/720p/1080p).
+    const qualities: { quality: string; url: string }[] = [];
+    try {
+      const pl = await (await fetch(master, {
+        headers: { "User-Agent": UA, ...(referer ? { Referer: referer } : {}) },
+        signal: AbortSignal.timeout(TIMEOUT_MS),
+      })).text();
+      const lines = pl.split("\n");
+      for (let i = 0; i < lines.length; i++) {
+        const m = lines[i].match(/RESOLUTION=\d+x\d+,NAME="([^"]+)"/i);
+        if (m) {
+          const uri = lines[i + 1]?.trim();
+          if (uri && !uri.startsWith("#")) {
+            qualities.push({ quality: m[1], url: new URL(uri, master).toString() });
+          }
+        }
+      }
+    } catch {
+      /* qualities optional */
+    }
+
+    return {
+      name: "Multi",
+      type: "multi",
+      streamUrl: master,
+      referer,
+      qualities,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Return the deduped server options for an episode: flixcloud HD-1/HD-2
+ * (sub/dub, embed) + the "Multi" regional-dub server (direct m3u8).
  */
 export async function listAnimelokServers(
   anilistId: number,
   episode: number
 ): Promise<AnimelokServer[]> {
-  const servers = await getFlixServers(anilistId, episode);
+  const [flixServers, multi] = await Promise.all([
+    getFlixServers(anilistId, episode),
+    getVibeplayerServer(anilistId, episode),
+  ]);
+
   const seen = new Set<string>();
   const out: AnimelokServer[] = [];
-  for (const s of servers) {
+  for (const s of flixServers) {
     const type = s.dataType === "dub" ? "dub" : "sub";
     const key = `${s.serverName}:${type}`;
     if (seen.has(key)) continue;
     seen.add(key);
     out.push({ name: s.serverName, type, embedUrl: s.dataLink });
   }
-  // order: HD-2 before HD-1, sub before dub
+  if (multi) out.push(multi);
+
+  // order: Multi first (regional dubs), then HD-2 before HD-1, sub before dub
   return out.sort((a, b) => {
+    if (a.type === "multi" && b.type !== "multi") return -1;
+    if (b.type === "multi" && a.type !== "multi") return 1;
     if (a.name !== b.name) return a.name === "HD-2" ? -1 : 1;
     return a.type === "sub" ? -1 : 1;
   });
