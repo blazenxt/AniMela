@@ -32,6 +32,33 @@ export async function GET(
     const detail = await animeDetail(id);
     if (!detail) return fail(404, "Anime not found");
 
+    // debug: resolve hexId then dump the watch page HTML (to inspect m3u8 placement)
+    if (sp.get("debug") === "1") {
+      const BASE = (process.env.ANIMELOK_BASE || "https://animelok.live").replace(/\/+$/, "");
+      const ua = { "User-Agent": "Mozilla/5.0 Chrome/126.0" };
+      const searchHtml = await (await fetch(
+        `${BASE}/search?keyword=${encodeURIComponent(detail.title)}`,
+        { headers: ua, signal: AbortSignal.timeout(15000) }
+      )).text();
+      const idMatch = searchHtml.match(/href="\/anime\/([a-f0-9]{6,})"/i);
+      const hexId = idMatch?.[1] || null;
+      let watchInfo: any = null;
+      if (hexId) {
+        const watchHtml = await (await fetch(
+          `${BASE}/watch/${hexId}?ep=${ep}`,
+          { headers: ua, signal: AbortSignal.timeout(15000) }
+        )).text();
+        watchInfo = {
+          hexId,
+          hasM3u8: /m3u8/i.test(watchHtml),
+          hasFlixcloud: /flixcloud/i.test(watchHtml),
+          m3u8Matches: (watchHtml.match(/https?:\/\/[^"'\s\\]+\.m3u8[^"'\s\\]*/gi) || []).slice(0, 3),
+          htmlTail: watchHtml.slice(-2000),
+        };
+      }
+      return ok({ title: detail.title, hexId, watch: watchInfo });
+    }
+
     const { result, errors } = await resolveEpisode(
       {
         anilistId: detail.id,
