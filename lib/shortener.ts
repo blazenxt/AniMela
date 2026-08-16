@@ -424,11 +424,15 @@ async function checkGofile(url: string): Promise<{ alive: boolean; note?: string
       headers: { "User-Agent": UA },
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
-    const json = await res.json().catch(() => null);
-    if (json?.status === "ok") return { alive: true };
-    if (json?.status === "error-notFound") {
+    // Dead content → HTTP 404 with a plain-text "error-notFound" body (not JSON).
+    if (res.status === 404) {
       return { alive: false, note: "file removed from gofile (dead link)" };
     }
+    const text = await res.text();
+    if (/error-notFound|not[-\s]?found/i.test(text)) {
+      return { alive: false, note: "file removed from gofile (dead link)" };
+    }
+    if (/"status"\s*:\s*"ok"/.test(text)) return { alive: true };
     return { alive: true }; // unknown status — don't block
   } catch {
     return { alive: true }; // API unreachable — assume alive
