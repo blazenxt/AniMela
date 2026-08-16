@@ -1,32 +1,32 @@
 /**
- * Shortener / link-protector resolver (server-side).
+ * Link shortener / protector resolver (server-side), with dedicated FREE
+ * bypass handlers for the common file-host protectors used by Hindi movie
+ * sites — ported from the open-source Link-Bypasser ecosystem
+ * (r-hulk / TheCaduceus). All techniques here are free; the only "cost" is a
+ * free account on a handful of protectors (GDToT / Sharer.pw / AppDrive) whose
+ * session cookie you paste into env vars once.
  *
- * The Hindi-movie providers wrap their real download links (Google Drive,
- * GDToT, gofile, …) inside link-protector pages like `mobilejsr.com/view/…`.
- * This module tries to "unshorten" those so users can get the direct link
- * without clicking through the ad/captcha page.
+ * Handlers (dispatched by hostname):
+ *   - adfly        : decrypt the `ysmm` JS blob (no auth)
+ *   - gplinks      : POST the hidden form to `/links/go` (gtlinks.me, gplinks,
+ *                    gyanilinks share this engine — no auth)
+ *   - droplink     : POST the hidden form (no auth)
+ *   - gdtot        : `crypt` cookie → `/dld?id=…` → base64 → Google Drive link
+ *   - sharer.pw    : `_token` + POST `/dl` → Google Drive link
+ *   - appdrive     : `key` + multipart POST → Google Drive link (account)
  *
- * Strategies, in order:
- *   1. **Redirect follow** — if the protector simply 302-redirects, return the
- *      final URL. Free win for plain shorteners.
- *   2. **Embedded extraction** — fetch the page HTML and look for the target
- *      URL embedded in it (plain `https?://…` matches, base64-encoded blobs,
- *      `meta refresh`, `window.location` / `location.href` JS assignments, and
- *      known download-host links). Filters to recognized download hosts first,
- *      then falls back to any external URL.
+ * Generic fallback (for everything else): redirect follow + embedded/cipher
+ * extraction, but only accepts known download hosts (no favicon false-positive).
  *
- * What it can't do (returned as `method: "manual"` so the UI can fall back to
- * the original link):
- *   - Captcha-gated protectors (mobilejsr's "three step auth" + Google Captcha)
- *   - GDToT (needs a logged-in session cookie `PHPSESSID` + `CRYPT`)
+ * ⚠️ Google reCAPTCHA-gated protectors (e.g. mobilejsr's "three step auth")
+ * cannot be auto-bypassed for free — the resolver returns `method: "manual"`.
  */
 
 const UA =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36";
 
-const TIMEOUT_MS = 10000;
+const TIMEOUT_MS = 15000;
 
-/** Hosts we consider the "real" download target (prioritized when embedded). */
 const KNOWN_HOSTS = [
   "drive.google.com",
   "docs.google.com",
@@ -40,19 +40,17 @@ const KNOWN_HOSTS = [
   "drivebit",
   "driveace",
   "drivepro",
+  "drivesharer",
   "sharer.pw",
   "droplink",
   "mega.nz",
   "mediafire",
   "terabox",
   "pixeldrain",
-  "streamtape",
-  "streamwish",
   "hubdrive",
   "katdrive",
   "kolop",
   "drivefire",
-  "linkvertise",
 ];
 
 export interface UnshortenResult {
@@ -60,8 +58,7 @@ export interface UnshortenResult {
   originalUrl: string;
   resolvedUrl?: string;
   host?: string;
-  /** how it was resolved: "redirect" | "embedded" | "manual" */
-  method: "redirect" | "embedded" | "manual";
+  method: "adfly" | "gplinks" | "droplink" | "gdtot" | "sharer" | "appdrive" | "redirect" | "embedded" | "manual";
   note?: string;
 }
 
@@ -78,30 +75,229 @@ function isKnownHost(url: string): boolean {
   return KNOWN_HOSTS.some((h) => host === h || host.endsWith(`.${h}`));
 }
 
-/** Fetch a page and return { finalUrl, html } (manual redirect handling). */
-async function fetchPage(url: string): Promise<{ finalUrl: string; html: string }> {
-  const res = await fetch(url, {
-    headers: { "User-Agent": UA, Accept: "text/html,application/xhtml+xml,*/*" },
+/** Reject SSRF targets. */
+function isPrivateHost(hostname: string): boolean {
+  const h = hostname.toLowerCase();
+  if (h === "localhost" || h === "metadata.google.internal" || h.endsWith(".internal")) return true;
+  if (h === "::1" || h === "0.0.0.0") return true;
+  const ipv4 = h.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (ipv4) {
+    const [a, b] = [Number(ipv4[1]), Number(ipv4[2])];
+    if (a === 127 || a === 10 || a === 0) return true;
+    if (a === 172 && b >= 16 && b <= 31) return true;
+    if (a === 192 && b === 168) return true;
+    if (a === 169 && b === 254) return true;
+  }
+  return false;
+}
+
+async function get(url: string, init: RequestInit = {}): Promise<Response> {
+  return fetch(url, {
+    ...init,
+    headers: {
+      "User-Agent": UA,
+      Accept: "text/html,application/xhtml+xml,application/json,*/*",
+      ...(init.headers as Record<string, string> | undefined),
+    },
     signal: AbortSignal.timeout(TIMEOUT_MS),
     redirect: "follow",
   });
-  const html = await res.text();
-  return { finalUrl: res.url || url, html };
 }
 
-/** Pull every URL-looking token out of a string. */
+// ── AdFly: decrypt the `ysmm` JS blob ────────────────────────────────────────
+
+function adflyDecrypt(code: string): string | null {
+  try {
+    let a = "";
+    let b = "";
+    for (let i = 0; i < code.length; i++) {
+      if (i % 2 === 0) a += code[i];
+      else b = code[i] + b;
+    }
+    const key = (a + b).split("");
+    let i = 0;
+    while (i < key.length) {
+      if (/\d/.test(key[i])) {
+        for (let j = i + 1; j < key.length; j++) {
+          if (/\d/.test(key[j])) {
+            const u = parseInt(key[i]) ^ parseInt(key[j]);
+            if (u < 10) key[i] = String(u);
+            i = j;
+            break;
+          }
+        }
+      }
+      i++;
+    }
+    const decrypted = Buffer.from(key.join(""), "base64").subarray(16, -16).toString("utf8");
+    return decrypted;
+  } catch {
+    return null;
+  }
+}
+
+async function bypassAdfly(url: string): Promise<string | null> {
+  const html = await (await get(url)).text();
+  const m = html.match(/ysmm\s*=\s*['"]([^'"]+)['"]/);
+  if (!m) return null;
+  let target = adflyDecrypt(m[1]);
+  if (!target) return null;
+  if (/go\.php\?u=/.test(target)) {
+    target = Buffer.from(target.replace(/.*?u=/, ""), "base64").toString();
+  } else if (/&dest=/.test(target)) {
+    target = decodeURIComponent(target.replace(/.*?dest=/, ""));
+  }
+  return target;
+}
+
+// ── GPLinks / DropLink: POST hidden form to /links/go ───────────────────────
+
+async function bypassLinksGo(url: string): Promise<string | null> {
+  const parsed = new URL(url);
+  const origin = `${parsed.protocol}//${parsed.host}`;
+
+  const first = await get(url, { redirect: "manual" });
+  const loc = first.headers.get("location");
+  const referer = loc ? new URL(loc, origin).origin + "/" : origin + "/";
+
+  const page = await get(url, { headers: { Referer: referer } });
+  const html = await page.text();
+
+  // harvest hidden inputs
+  const data: Record<string, string> = {};
+  const inputRe = /<input[^>]+name=["']([^"']+)["'][^>]+value=["']([^"']*)["'][^>]*>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = inputRe.exec(html)) !== null) data[m[1]] = m[2];
+
+  const goUrl = `${origin}/links/go`;
+  const res = await fetch(goUrl, {
+    method: "POST",
+    headers: {
+      "User-Agent": UA,
+      "Content-Type": "application/x-www-form-urlencoded",
+      "X-Requested-With": "XMLHttpRequest",
+      Referer: referer,
+    },
+    body: new URLSearchParams(data).toString(),
+    signal: AbortSignal.timeout(TIMEOUT_MS),
+  });
+  if (!res.ok) return null;
+  const json = await res.json().catch(() => null);
+  return json?.url || json?.link || null;
+}
+
+// ── GDToT: crypt cookie → /dld?id=… → base64 → Google Drive ─────────────────
+
+async function bypassGdtot(url: string): Promise<string | null> {
+  const crypt = (process.env.GDTOT_CRYPT || "").trim();
+  if (!crypt) return null; // needs a free GDToT account cookie
+
+  const parsed = new URL(url);
+  const id = url.split("/").filter(Boolean).pop() || "";
+  const dldUrl = `${parsed.protocol}//${parsed.host}/dld?id=${encodeURIComponent(id)}`;
+
+  await get(url, { headers: { Cookie: `crypt=${crypt}` } });
+  const res = await get(dldUrl, { headers: { Cookie: `crypt=${crypt}` } });
+  const text = await res.text();
+  const m = text.match(/URL=([^"]*)"/);
+  if (!m) return null;
+
+  const params = new URLSearchParams(new URL(m[1].replace(/&amp;/g, "&"), parsed.origin).search);
+  const gd = params.get("gd");
+  if (!gd || gd === "false") return null;
+
+  const decodedId = Buffer.from(gd, "base64").toString("utf8");
+  return `https://drive.google.com/open?id=${decodedId}`;
+}
+
+// ── Sharer.pw: _token + POST /dl ────────────────────────────────────────────
+
+async function bypassSharer(url: string): Promise<string | null> {
+  const xsrf = (process.env.SHARER_XSRF_TOKEN || "").trim();
+  const session = (process.env.SHARER_LARAVEL_SESSION || "").trim();
+  if (!xsrf || !session) return null;
+
+  const cookie = `XSRF-TOKEN=${xsrf}; laravel_session=${session}`;
+  const html = await (await get(url, { headers: { Cookie: cookie } })).text();
+  const token = html.match(/_token\s*=\s*['"]([^'"]+)['"]/)?.[1];
+  if (!token) return null;
+
+  const res = await fetch(`${url}/dl`, {
+    method: "POST",
+    headers: {
+      "User-Agent": UA,
+      "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+      "X-Requested-With": "XMLHttpRequest",
+      Cookie: cookie,
+    },
+    body: new URLSearchParams({ _token: token }).toString(),
+    signal: AbortSignal.timeout(TIMEOUT_MS),
+  });
+  if (!res.ok) return null;
+  const json = await res.json().catch(() => null);
+  return json?.url || null;
+}
+
+// ── AppDrive family: key + multipart POST (account) ─────────────────────────
+
+async function bypassAppdrive(url: string): Promise<string | null> {
+  const email = (process.env.APPDRIVE_EMAIL || "").trim();
+  const password = (process.env.APPDRIVE_PASSWORD || "").trim();
+  if (!email || !password) return null;
+
+  const parsed = new URL(url);
+  const origin = `${parsed.protocol}//${parsed.host}`;
+
+  // login (session cookie)
+  const jar: string[] = [];
+  await fetch(`${origin}/login`, {
+    method: "POST",
+    headers: { "User-Agent": UA, "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ email, password }).toString(),
+    signal: AbortSignal.timeout(TIMEOUT_MS),
+  });
+
+  const html = await (await get(url)).text();
+  const key = html.match(/["']key["'],\s*["']([^"']+)["']/)?.[1];
+  if (!key) return null;
+
+  // multipart POST (type 1→3 until a JSON response)
+  for (let type = 1; type <= 3; type++) {
+    const boundary = `----AniMela${Math.random().toString(16).slice(2)}`;
+    const fields: Record<string, string> = { type: String(type), key, action: "original" };
+    const bodyParts: string[] = [];
+    for (const [k, v] of Object.entries(fields)) {
+      bodyParts.push(
+        `--${boundary}\r\nContent-Disposition: form-data; name="${k}"\r\n\r\n${v}\r\n`
+      );
+    }
+    bodyParts.push(`--${boundary}--\r\n`);
+
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "User-Agent": UA,
+        "Content-Type": `multipart/form-data; boundary=${boundary}`,
+      },
+      body: bodyParts.join(""),
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    });
+    const json = await res.json().catch(() => null);
+    if (json?.url) return json.url;
+  }
+  return null;
+}
+
+// ── Generic fallback ────────────────────────────────────────────────────────
+
 function extractUrls(text: string): string[] {
   const urls: string[] = [];
   const re = /https?:\/\/[^\s"'<>\\]+/gi;
   let m: RegExpExecArray | null;
-  while ((m = re.exec(text)) !== null) {
-    let u = m[0].replace(/[),.;]+$/, "");
-    urls.push(u);
-  }
+  while ((m = re.exec(text)) !== null) urls.push(m[0].replace(/[),.;]+$/, ""));
   return urls;
 }
 
-/** Try to base64-decode candidate blobs and pull URLs out of them. */
 function extractBase64Urls(html: string): string[] {
   const found: string[] = [];
   const re = /[A-Za-z0-9+/]{40,}={0,2}/g;
@@ -109,9 +305,7 @@ function extractBase64Urls(html: string): string[] {
   while ((m = re.exec(html)) !== null) {
     try {
       const decoded = Buffer.from(m[0], "base64").toString("utf8");
-      if (/https?:\/\//.test(decoded)) {
-        found.push(...extractUrls(decoded));
-      }
+      if (/https?:\/\//.test(decoded)) found.push(...extractUrls(decoded));
     } catch {
       /* skip */
     }
@@ -119,16 +313,6 @@ function extractBase64Urls(html: string): string[] {
   return found;
 }
 
-/**
- * Decode the link-protector's obfuscation cipher (used by mobilejsr and
- * similar "LinkShrink"-style scripts):
- *
- *   decodeURIComponent(s).replace(/@@/g, "@")
- *     .split("").map((n, r) => {
- *       const t = n.charCodeAt(0) - 32;
- *       return t >= 0 && t < 95 ? String.fromCharCode(32 + (t + r) % 95) : n;
- *     }).join("")
- */
 export function decodeObfuscated(encoded: string): string {
   let d: string;
   try {
@@ -145,47 +329,60 @@ export function decodeObfuscated(encoded: string): string {
   return out;
 }
 
-/**
- * Extract the raw encoded strings from inline scripts of the form
- * `decodeURI("...")` / `decodeURIComponent("...")` (the protector's reveal
- * payload), decode them, and return any URLs inside the decoded output.
- */
-export function extractDecodedUrls(html: string): string[] {
-  const found: string[] = [];
-  for (const decoded of extractDecodedTexts(html)) {
-    found.push(...extractUrls(decoded));
-  }
-  return found;
-}
-
-/** Return the fully-decoded payload text for every `decodeURI("…")` call. */
 export function extractDecodedTexts(html: string): string[] {
   const out: string[] = [];
-  // Double-quoted payload (the protector's string may contain apostrophes,
-  // so we can't use a broad [^"'] exclusion).
   const re = /decodeURI(?:Component)?\s*\(\s*"((?:[^"\\]|\\.)*)"\s*\)/g;
   let m: RegExpExecArray | null;
-  while ((m = re.exec(html)) !== null) {
-    out.push(decodeObfuscated(m[1]));
-  }
+  while ((m = re.exec(html)) !== null) out.push(decodeObfuscated(m[1]));
   return out;
 }
 
-/** Reject obvious SSRF targets (localhost / private / link-local / metadata). */
-function isPrivateHost(hostname: string): boolean {
-  const h = hostname.toLowerCase();
-  if (h === "localhost" || h === "metadata.google.internal" || h.endsWith(".internal")) return true;
-  if (h === "::1" || h === "0.0.0.0") return true;
-  const ipv4 = h.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
-  if (ipv4) {
-    const [a, b] = [Number(ipv4[1]), Number(ipv4[2])];
-    if (a === 127 || a === 10 || a === 0) return true;
-    if (a === 172 && b >= 16 && b <= 31) return true;
-    if (a === 192 && b === 168) return true;
-    if (a === 169 && b === 254) return true;
-  }
-  return false;
+export function extractDecodedUrls(html: string): string[] {
+  const found: string[] = [];
+  for (const decoded of extractDecodedTexts(html)) found.push(...extractUrls(decoded));
+  return found;
 }
+
+async function genericFallback(url: string, originalHost: string): Promise<UnshortenResult> {
+  const base: UnshortenResult = { ok: false, originalUrl: url, method: "manual" };
+  try {
+    const res = await get(url);
+    const html = await res.text();
+    const finalHost = extractHost(res.url);
+
+    if (finalHost && finalHost !== originalHost && res.url !== url && isKnownHost(res.url)) {
+      return { ok: true, originalUrl: url, resolvedUrl: res.url, host: finalHost, method: "redirect" };
+    }
+
+    const candidates: string[] = [...extractUrls(html), ...extractBase64Urls(html), ...extractDecodedUrls(html)];
+    const meta = html.match(/<meta[^>]+http-equiv=["']?refresh["']?[^>]+content=["']?[^"']*url=([^"']+)/i);
+    if (meta) candidates.push(meta[1]);
+    for (const m of html.matchAll(/(?:window\.location|location\.href|location\.replace)\s*[=.(]\s*["']([^"']+)["']/gi)) {
+      candidates.push(m[1]);
+    }
+
+    const seen = new Set<string>();
+    for (const c of candidates) {
+      let u = c.trim();
+      if (!/^https?:\/\//i.test(u)) continue;
+      u = u.replace(/\\\//g, "/").replace(/[),.;]+$/, "");
+      const h = extractHost(u);
+      if (!h || h === originalHost || h.endsWith(`.${originalHost}`)) continue;
+      if (/\.(png|jpe?g|gif|webp|svg|ico|css|js|woff2?|ttf|otf|eot)([?#].*)?$/i.test(u)) continue;
+      if (seen.has(u)) continue;
+      seen.add(u);
+      if (isKnownHost(u)) {
+        return { ok: true, originalUrl: url, resolvedUrl: u, host: h, method: "embedded" };
+      }
+    }
+
+    return { ...base, note: "no direct link found (likely captcha-gated)" };
+  } catch (e) {
+    return { ...base, note: e instanceof Error ? e.message : "fetch failed" };
+  }
+}
+
+// ── Dispatcher ──────────────────────────────────────────────────────────────
 
 export async function unshorten(url: string): Promise<UnshortenResult> {
   const base: UnshortenResult = { ok: false, originalUrl: url, method: "manual" };
@@ -196,84 +393,40 @@ export async function unshorten(url: string): Promise<UnshortenResult> {
   } catch {
     return { ...base, note: "invalid url" };
   }
-  if (target.protocol !== "https:" && target.protocol !== "http:") {
-    return { ...base, note: "bad protocol" };
-  }
-  if (isPrivateHost(target.hostname)) {
-    return { ...base, note: "host not allowed" };
-  }
+  if (target.protocol !== "https:" && target.protocol !== "http:") return { ...base, note: "bad protocol" };
+  if (isPrivateHost(target.hostname)) return { ...base, note: "host not allowed" };
 
-  const originalHost = extractHost(url);
+  const host = extractHost(url);
 
   try {
-    const { finalUrl, html } = await fetchPage(url);
-    const finalHost = extractHost(finalUrl);
-
-    // 1) Simple redirect shortener → only trust it if it landed on a known
-    //    download host (otherwise it's just an ad hop, not the real link).
-    if (finalHost && finalHost !== originalHost && finalUrl !== url) {
-      if (isKnownHost(finalUrl)) {
-        return {
-          ok: true,
-          originalUrl: url,
-          resolvedUrl: finalUrl,
-          host: finalHost,
-          method: "redirect",
-        };
-      }
+    // dedicated free handlers first
+    if (/(^|\.)(gplinks\.|gtlinks\.me|gyanilinks\.|gplink\.)/.test(host)) {
+      const r = await bypassLinksGo(url);
+      if (r) return { ok: true, originalUrl: url, resolvedUrl: r, host: extractHost(r), method: "gplinks" };
     }
-
-    // 2) Embedded extraction.
-    const candidates: string[] = [
-      ...extractUrls(html),
-      ...extractBase64Urls(html),
-      ...extractDecodedUrls(html),
-    ];
-
-    // meta refresh
-    const meta = html.match(/<meta[^>]+http-equiv=["']?refresh["']?[^>]+content=["']?[^"']*url=([^"']+)/i);
-    if (meta) candidates.push(meta[1]);
-
-    // JS assignments
-    const js = [
-      ...html.matchAll(/(?:window\.location|location\.href|location\.replace)\s*[=.(]\s*["']([^"']+)["']/gi),
-    ].map((m) => m[1]);
-    candidates.push(...js);
-
-    // clean + dedupe, drop protector's own URLs and obvious assets (img/css/js)
-    const seen = new Set<string>();
-    const external: string[] = [];
-    for (const c of candidates) {
-      let u = c.trim();
-      if (!/^https?:\/\//i.test(u)) continue;
-      u = u.replace(/\\\//g, "/").replace(/[),.;]+$/, "");
-      const h = extractHost(u);
-      if (!h || h === originalHost || h.endsWith(`.${originalHost}`)) continue;
-      if (/\.(png|jpe?g|gif|webp|svg|ico|css|js|woff2?|ttf|otf|eot)([?#].*)?$/i.test(u)) continue;
-      if (seen.has(u)) continue;
-      seen.add(u);
-      external.push(u);
+    if (/droplink/.test(host)) {
+      const r = await bypassLinksGo(url);
+      if (r) return { ok: true, originalUrl: url, resolvedUrl: r, host: extractHost(r), method: "droplink" };
     }
-
-    // Only accept a known download host — captcha-gated protectors don't embed
-    // the real link in HTML, so anything else is an ad/asset false-positive.
-    const pick = external.find(isKnownHost);
-
-    if (pick) {
-      return {
-        ok: true,
-        originalUrl: url,
-        resolvedUrl: pick,
-        host: extractHost(pick),
-        method: "embedded",
-      };
+    if (/adf\.ly|adfly|j\.gs|q\.gs/.test(host)) {
+      const r = await bypassAdfly(url);
+      if (r) return { ok: true, originalUrl: url, resolvedUrl: r, host: extractHost(r), method: "adfly" };
     }
-
-    return { ...base, note: "no direct link found (likely captcha-gated)" };
-  } catch (e) {
-    return {
-      ...base,
-      note: e instanceof Error ? e.message : "fetch failed",
-    };
+    if (/gdtot/.test(host)) {
+      const r = await bypassGdtot(url);
+      if (r) return { ok: true, originalUrl: url, resolvedUrl: r, host: extractHost(r), method: "gdtot" };
+    }
+    if (/sharer\.pw/.test(host)) {
+      const r = await bypassSharer(url);
+      if (r) return { ok: true, originalUrl: url, resolvedUrl: r, host: extractHost(r), method: "sharer" };
+    }
+    if (/appdrive|driveapp|drivehub|gdflix|drivesharer|drivebit|drivelinks|driveace|drivepro/.test(host)) {
+      const r = await bypassAppdrive(url);
+      if (r) return { ok: true, originalUrl: url, resolvedUrl: r, host: extractHost(r), method: "appdrive" };
+    }
+  } catch {
+    /* fall through to generic */
   }
+
+  return genericFallback(url, host);
 }

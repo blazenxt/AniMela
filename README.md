@@ -60,22 +60,37 @@ The server binds to `0.0.0.0` so it can be previewed or deployed anywhere.
 | `ANIMEPAHE_BASE` | AnimePahe mirror (rotates: `.si`/`.com`/`.org`) | `https://animepahe.com` |
 | `MOVIE_PROVIDER_ORDER` | Hindi/Desi movie source priority | `sevenhitmovies` |
 | `SEVENHITMOVIES_BASE` | SevenHitMovies domain (rotates) | `https://7hitmovies.net` |
+| `GDTOT_CRYPT` | GDToT `crypt` cookie (free account) | *(unset)* |
+| `SHARER_XSRF_TOKEN` | Sharer.pw XSRF token (free account) | *(unset)* |
+| `SHARER_LARAVEL_SESSION` | Sharer.pw session cookie (free account) | *(unset)* |
+| `APPDRIVE_EMAIL` / `APPDRIVE_PASSWORD` | AppDrive-family account | *(unset)* |
 
 ### Link shortener bypass
 
-The Hindi movie sources wrap their real download links in link-protector pages
-(e.g. `mobilejsr.com/view/…`). `/api/v1/unshorten?url=…` resolves these
-server-side and returns the direct link when possible:
+The Hindi movie sources wrap their real download links (Google Drive) inside
+link-protector pages. `/api/v1/unshorten?url=…` resolves these **server-side for
+free**, with dedicated handlers for the common file-host protectors (ported from
+the open-source Link-Bypasser ecosystem):
 
-- **`redirect`** — plain redirect shortener (e.g. `is.gd`) → direct URL returned.
-- **`embedded`** — the target URL is embedded in the page (plain links, base64,
-  or the protector's character-shift cipher) → decoded and returned.
-- **`manual`** — captcha-gated protectors (mobilejsr's "three step auth" +
-  Google reCAPTCHA). These cannot be auto-bypassed without a paid captcha
-  solver, so the UI falls back to opening the original link.
+| Protector | Method | Free auth needed? |
+| --- | --- | --- |
+| AdFly | decrypt `ysmm` JS blob | none |
+| GPLinks / gtlinks.me / gyanilinks | POST `/links/go` | none |
+| DropLink | POST form | none |
+| GDToT | `crypt` cookie → `/dld` → base64 → GDrive | free GDToT account cookie (`GDTOT_CRYPT`) |
+| Sharer.pw | `_token` → POST `/dl` | free account cookies (`SHARER_XSRF_TOKEN`, `SHARER_LARAVEL_SESSION`) |
+| AppDrive family | `key` + multipart POST | free account (`APPDRIVE_EMAIL` / `APPDRIVE_PASSWORD`) |
+
+Anything else falls back to redirect-follow + embedded/cipher extraction, and
+only accepts known download hosts (no favicon/ad false positives).
+
+> ⚠️ **Google reCAPTCHA-gated protectors** (e.g. mobilejsr's "three step auth")
+> cannot be auto-bypassed for free — there is no free solver for Google's
+> reCAPTCHA. Those return `method: "manual"` and the UI opens the original link.
+> Everything *except* the captcha step is bypassed free.
 
 The movie detail page has a **"resolve"** button per link that calls this
-endpoint and swaps in the direct link when it succeeds.
+endpoint and swaps in the direct Google Drive link when it succeeds.
 
 See `.env.example` for the full annotated set.
 
