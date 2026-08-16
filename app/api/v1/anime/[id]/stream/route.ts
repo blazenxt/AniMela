@@ -50,10 +50,12 @@ export async function GET(
         )).text();
         watchInfo = {
           hexId,
-          hasM3u8: /m3u8/i.test(watchHtml),
-          hasFlixcloud: /flixcloud/i.test(watchHtml),
-          m3u8Matches: (watchHtml.match(/https?:\/\/[^"'\s\\]+\.m3u8[^"'\s\\]*/gi) || []).slice(0, 3),
-          htmlTail: watchHtml.slice(-2000),
+          len: watchHtml.length,
+          flixcloud: (watchHtml.match(/flixcloud[^"'\s\\]*/gi) || []).slice(0, 5),
+          embedLinks: (watchHtml.match(/https?:\/\/[^"'\s\\]*flixcloud[^"'\s\\]*/gi) || []).slice(0, 5),
+          eLinks: (watchHtml.match(/flixcloud\.cc\/e\/[^"'\s\\]*/gi) || []).slice(0, 5),
+          apiHints: (watchHtml.match(/["']\/api\/[a-zA-Z0-9_\/-]+["']/g) || []).slice(0, 10),
+          dataLink: (watchHtml.match(/dataLink[^,}]{0,120}/gi) || []).slice(0, 3),
         };
       }
       return ok({ title: detail.title, hexId, watch: watchInfo });
