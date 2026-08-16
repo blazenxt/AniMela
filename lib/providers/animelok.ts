@@ -17,6 +17,7 @@
  */
 
 import { AnimeEpisode, AnimeRef, StreamProvider, StreamResult } from "../anime-stream";
+import { decryptFlixcloud } from "../flixcloud-decrypt";
 
 const BASE = (process.env.ANIMELOK_BASE || "https://animelok.live").replace(/\/+$/, "");
 const TIMEOUT_MS = 15000;
@@ -32,6 +33,16 @@ async function getHtml(path: string): Promise<string> {
   });
   if (!res.ok) throw new Error(`animelok ${res.status}`);
   return res.text();
+}
+
+async function getJson<T = any>(path: string): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, {
+    headers: { "User-Agent": UA, Accept: "application/json, */*" },
+    signal: AbortSignal.timeout(TIMEOUT_MS),
+    cache: "no-store",
+  });
+  if (!res.ok) throw new Error(`animelok ${res.status}`);
+  return (await res.json()) as T;
 }
 
 function norm(s: string): string {
@@ -102,6 +113,26 @@ function extractM3u8(html: string): string | null {
   return m ? m[0].replace(/&amp;/g, "&") : null;
 }
 
+interface FlixServer {
+  serverName: string;
+  dataLink: string;
+  dataType: "sub" | "dub" | string;
+}
+
+/** Fetch flixcloud server list for an episode via Animelok's API. */
+async function getFlixServers(anilistId: number, episode: number): Promise<FlixServer[]> {
+  const d = await getJson<any>(`/api/flix/${anilistId}/${episode}`);
+  if (!d?.success || !Array.isArray(d.servers)) return [];
+  return d.servers as FlixServer[];
+}
+
+/** Pull access_id + v out of a flixcloud dataLink (…/e/{id}?v={1|2}). */
+function parseDataLink(link: string): { accessId: string; v: number } | null {
+  const m = link.match(/\/e\/([^?#\s]+)\?v=(\d+)/);
+  if (!m) return null;
+  return { accessId: m[1], v: Number(m[2]) };
+}
+
 export const AnimelokProvider: StreamProvider = {
   id: "animelok",
 
@@ -136,28 +167,63 @@ export const AnimelokProvider: StreamProvider = {
   async resolveEpisode(
     ref: AnimeRef,
     episode: number,
-    _dub: boolean
+    dub: boolean
   ): Promise<StreamResult | null> {
-    const resolved = await resolveAnime(ref);
-    if (!resolved) return null;
+    // Prefer the AniList id → Animelok's /api/flix/{anilistId}/{ep} endpoint,
+    // which directly returns flixcloud servers (no title search needed).
+    const anilistId = ref.anilistId ?? null;
 
-    try {
-      const html = await getHtml(`/watch/${resolved.id}?ep=${episode}`);
-      const m3u8 = extractM3u8(html);
-      if (!m3u8) return null;
+    const servers = anilistId ? await getFlixServers(anilistId, episode) : [];
+    // Order: requested audio first, HD-2 (v=2) preferred over HD-1.
+    const wanted = dub ? ["dub", "sub"] : ["sub", "dub"];
+    const sorted = servers.sort((a, b) => {
+      const aType = wanted.indexOf(a.dataType);
+      const bType = wanted.indexOf(b.dataType);
+      if (aType !== bType) return (aType < 0 ? 9 : aType) - (bType < 0 ? 9 : bType);
+      const aV = a.dataLink.includes("v=2") ? 0 : 1;
+      const bV = b.dataLink.includes("v=2") ? 0 : 1;
+      return aV - bV;
+    });
 
-      return {
-        provider: "animelok",
-        server: "Animelok",
-        // Animelok's default is Japanese sub; dubs are selectable in its player.
-        // We resolve the default stream and let the user's player play it.
-        subOrDub: "sub",
-        sources: [{ url: m3u8, quality: "default", isM3U8: true }],
-        subtitles: [],
-        headers: { Referer: `${BASE}/` },
-      };
-    } catch {
-      return null;
+    for (const s of sorted) {
+      const parsed = parseDataLink(s.dataLink);
+      if (!parsed) continue;
+      try {
+        const decrypted = await decryptFlixcloud(parsed.accessId, parsed.v, `${BASE}/`);
+        return {
+          provider: "animelok",
+          server: s.serverName,
+          subOrDub: s.dataType === "dub" ? "dub" : "sub",
+          sources: [{ url: decrypted.url, quality: "default", isM3U8: true }],
+          subtitles: decrypted.subtitles.map((t) => ({ url: t.url, lang: t.language })),
+          headers: { Referer: `${BASE}/` },
+        };
+      } catch {
+        // try next server
+      }
     }
+
+    // Fallback: old watch-page m3u8 extraction (rarely present server-side).
+    try {
+      const resolved = await resolveAnime(ref);
+      if (resolved) {
+        const html = await getHtml(`/watch/${resolved.id}?ep=${episode}`);
+        const m3u8 = extractM3u8(html);
+        if (m3u8) {
+          return {
+            provider: "animelok",
+            server: "Animelok",
+            subOrDub: "sub",
+            sources: [{ url: m3u8, quality: "default", isM3U8: true }],
+            subtitles: [],
+            headers: { Referer: `${BASE}/` },
+          };
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+
+    return null;
   },
 };
