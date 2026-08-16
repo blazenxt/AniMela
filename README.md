@@ -56,7 +56,8 @@ The server binds to `0.0.0.0` so it can be previewed or deployed anywhere.
 | `NEXT_PUBLIC_CINEZO_BASE` | Override the metadata API host if the domain changes | `https://cinezo.org` |
 | `ANILIST_BASE` | AniList GraphQL endpoint | `https://graphql.anilist.co` |
 | `JIKAN_BASE` | Jikan v4 base (metadata fallback) | `https://api.jikan.moe/v4` |
-| `ANIME_PROVIDER_ORDER` | Anime stream provider priority | `animepahe` |
+| `ANIME_PROVIDER_ORDER` | Anime stream provider priority | `animelok,animepahe` |
+| `ANIMELOK_BASE` | Animelok base host | `https://animelok.live` |
 | `ANIMEPAHE_BASE` | AnimePahe mirror (rotates: `.si`/`.com`/`.org`) | `https://animepahe.com` |
 | `MOVIE_PROVIDER_ORDER` | Hindi/Desi movie source priority | `sevenhitmovies` |
 | `SEVENHITMOVIES_BASE` | SevenHitMovies domain (rotates) | `https://7hitmovies.net` |
@@ -225,21 +226,32 @@ titles, studios, MAL-style score, airing status, episode counts), with **Jikan v
 as a fallback. Implemented in `lib/anilist.ts` (types/queries) + `lib/anime-meta.ts`
 (server fetch + 5-min cache + fallback).
 
-### 3. Anime streaming — AnimePahe (configurable provider)
+### 3. Anime streaming — Animelok (LIVE source, ex Animerulz)
 
 Episode streams resolve through a **provider abstraction** (`lib/anime-stream.ts`)
-with ordered fallback, matching the architecture used by Tatakai and the wider
-anime-scraper ecosystem.
+with ordered fallback. The primary source is **Animelok** (animelok.live, the
+rebrand of Animerulz/Hiddenleaf), an Indian-focused anime site with Japanese +
+regional dubs (Hindi, Telugu, Tamil, Malayalam, Bengali, Kannada).
 
-> ⚠️ **2026 ecosystem reality:** the free anime scraping ecosystem has largely
-> collapsed — HiAnime and AnimeKai shut down permanently (ACE legal action),
-> the public Consumet API was retired, and AnimePahe sits behind a Cloudflare
-> challenge from datacenter IPs. AniMela ships a clean, extensible provider
-> layer (`lib/providers/animepahe.ts`, via `@consumet/extensions`) whose base
-> domain is configurable via `ANIMEPAHE_BASE` (`.si`/`.com`/`.org` rotate).
-> If every provider fails, the UI degrades gracefully to a "no source" message.
-> Adding a working provider is a one-file change + a registry entry in
-> `ANIME_PROVIDER_ORDER`.
+**How it works** (`lib/providers/animelok.ts` + `lib/flixcloud-decrypt.ts`):
+
+1. Search by title → resolve the site's hex id + episode count.
+2. `GET /api/flix/{anilistId}/{ep}` → flixcloud.cc server list (HD-1/HD-2, sub/dub).
+3. **Decrypt** flixcloud's rotating WASM-based AES-256-CBC scheme (ported from
+   ReAnime.to-API) → the real signed `.m3u8` URL + subtitles.
+4. `app/api/hls/route.ts` proxies the playlist + segments so the browser never
+   hits the protected CDN directly.
+
+> ⚠️ **Remaining limitation:** flixcloud IP-binds its stream tokens to the
+> decryptor's IP and its video CDN (`fetch*.flixcloud.cc`) Cloudflare-blocks
+> datacenter IPs (Railway/Vercel). Decryption works server-side, but final
+> playback may 403 from a datacenter host — a fixed residential IP / proxy, or
+> running the resolver near the user, avoids this. This is a hosting constraint,
+> not a code bug.
+
+The old `animepahe` provider remains as a fallback (`lib/providers/animepahe.ts`,
+via `@consumet/extensions`). Provider order is configurable via
+`ANIME_PROVIDER_ORDER` (default `animelok,animepahe`).
 
 ### 4. Hindi / Desi movies — download-oriented sources
 
