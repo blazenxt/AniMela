@@ -1,13 +1,13 @@
 "use client";
 
 import { use, useEffect } from "react";
+import Link from "next/link";
 import { api } from "@/lib/api";
 import { useApi } from "@/lib/useApi";
 import Loading from "@/components/Loading";
 import ErrorState from "@/components/ErrorState";
-import AnimePlayer from "@/components/AnimePlayer";
 import { formatLabel, statusLabel, stripHtml } from "@/lib/anilist";
-import { ExternalLinkIcon, StarIcon } from "@/components/Icons";
+import { ExternalLinkIcon, PlayIcon, StarIcon } from "@/components/Icons";
 
 export default function AnimePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -78,13 +78,19 @@ export default function AnimePage({ params }: { params: Promise<{ id: string }> 
                 ))}
               </div>
             )}
+
+            <Link
+              href={`/anime/${data.id}/watch`}
+              className="mt-5 inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-fuchsia-500 to-violet-600 px-6 py-3 font-bold text-white shadow-lg shadow-violet-900/40 transition hover:opacity-90"
+            >
+              <PlayIcon className="h-5 w-5" />
+              Watch Now
+            </Link>
           </div>
         </div>
 
         <div className="mt-8 grid gap-8 lg:grid-cols-[1fr_340px]">
           <div>
-            <AnimePlayer anilistId={data.id} title={data.title} />
-
             {synopsis && (
               <div className="mt-6">
                 <h2 className="mb-2 flex items-center gap-2 font-display text-lg font-bold text-white">

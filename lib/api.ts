@@ -223,6 +223,14 @@ export const api = {
     dub = false
   ): Promise<{ available: boolean; sources?: AnimeStreamSource[]; subtitles?: { url: string; lang: string }[]; headers?: Record<string, string>; embedUrl?: string; provider?: string; server?: string } & Record<string, unknown>> =>
     fetchV1(`/anime/${id}/stream?ep=${episode}&dub=${dub ? 1 : 0}`),
+  animeServers: (
+    id: number | string,
+    episode: number
+  ): Promise<{
+    available: boolean;
+    servers: { name: string; type: "sub" | "dub"; embedUrl: string }[];
+    languages: { code: string; label: string; episodes?: number | null }[];
+  }> => fetchV1(`/anime/${id}/servers?ep=${episode}`),
 
   // ── Hindi / Desi movies (download-oriented providers) ─────────────────
   hindiSearch: (query: string, page = 1): Promise<{ results: HindiMovieItem[] }> =>

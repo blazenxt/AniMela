@@ -119,6 +119,13 @@ interface FlixServer {
   dataType: "sub" | "dub" | string;
 }
 
+/** A deduped server option exposed to the watch page. */
+export interface AnimelokServer {
+  name: string; // "HD-1" | "HD-2"
+  type: "sub" | "dub";
+  embedUrl: string; // flixcloud dataLink (player iframe URL)
+}
+
 /** Fetch flixcloud server list for an episode via Animelok's API. */
 async function getFlixServers(anilistId: number, episode: number): Promise<FlixServer[]> {
   const d = await getJson<any>(`/api/flix/${anilistId}/${episode}`);
@@ -126,11 +133,88 @@ async function getFlixServers(anilistId: number, episode: number): Promise<FlixS
   return d.servers as FlixServer[];
 }
 
+/**
+ * Return the deduped server options (name + sub/dub) for an episode. Each maps
+ * to a flixcloud embed URL that the watch page can iframe directly (the embed
+ * plays on the user's IP and its own player exposes the 🎧 multi-audio switch).
+ */
+export async function listAnimelokServers(
+  anilistId: number,
+  episode: number
+): Promise<AnimelokServer[]> {
+  const servers = await getFlixServers(anilistId, episode);
+  const seen = new Set<string>();
+  const out: AnimelokServer[] = [];
+  for (const s of servers) {
+    const type = s.dataType === "dub" ? "dub" : "sub";
+    const key = `${s.serverName}:${type}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ name: s.serverName, type, embedUrl: s.dataLink });
+  }
+  // order: HD-2 before HD-1, sub before dub
+  return out.sort((a, b) => {
+    if (a.name !== b.name) return a.name === "HD-2" ? -1 : 1;
+    return a.type === "sub" ? -1 : 1;
+  });
+}
+
 /** Pull access_id + v out of a flixcloud dataLink (…/e/{id}?v={1|2}). */
 function parseDataLink(link: string): { accessId: string; v: number } | null {
   const m = link.match(/\/e\/([^?#\s]+)\?v=(\d+)/);
   if (!m) return null;
   return { accessId: m[1], v: Number(m[2]) };
+}
+
+export interface AnimelokLanguage {
+  code: string; // "hindi" | "tamil" | "japanese" ...
+  label: string; // "Hindi" | "Tamil" | "Japanese" ...
+  episodes?: number | null;
+}
+
+/**
+ * Extract the available audio languages for an anime. Animelok lists them on
+ * the anime page as `Languages: JAPANESE ENGLISH HINDI …` and a compact
+ * `HIN- 199 TAM- 198 …` episode-count line.
+ */
+export async function listAnimelokLanguages(ref: AnimeRef): Promise<AnimelokLanguage[]> {
+  const resolved = await resolveAnime(ref);
+  if (!resolved) return [];
+
+  const html = await getHtml(`/anime/${resolved.id}`);
+  const languages: AnimelokLanguage[] = [];
+
+  // "Languages: JAPANESE ENGLISH HINDI TELUGU TAMIL MALAYALAM KANNADA"
+  const langBlock = html.match(/Languages\s*:\s*([A-Z ]{2,})/i);
+  if (langBlock) {
+    const names = langBlock[1].trim().split(/\s+/).filter(Boolean);
+    for (const n of names) {
+      const label = n.charAt(0) + n.slice(1).toLowerCase();
+      if (!languages.some((l) => l.label === label)) {
+        languages.push({ code: label.toLowerCase(), label });
+      }
+    }
+  }
+
+  // episode counts per language, e.g. "HIN- 199 TAM- 198 TEL- 199 JAP- 1173"
+  const countMap: Record<string, number> = {};
+  const countRe = /\b(HIN|TAM|TEL|ENG|KAN|JAP|MAL)\s*-\s*(\d+)\b/g;
+  let cm: RegExpExecArray | null;
+  while ((cm = countRe.exec(html)) !== null) {
+    countMap[cm[1]] = Number(cm[2]);
+  }
+  const codeToFull: Record<string, string> = {
+    HIN: "hindi", TAM: "tamil", TEL: "telugu", ENG: "english",
+    KAN: "kannada", JAP: "japanese", MAL: "malayalam", BEN: "bengali",
+  };
+  for (const [short, code] of Object.entries(codeToFull)) {
+    if (countMap[short] != null) {
+      const existing = languages.find((l) => l.code === code);
+      if (existing) existing.episodes = countMap[short];
+    }
+  }
+
+  return languages;
 }
 
 export const AnimelokProvider: StreamProvider = {
