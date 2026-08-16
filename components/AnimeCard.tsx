@@ -3,18 +3,20 @@
 import Link from "next/link";
 import { AnimeItem, formatLabel } from "@/lib/anilist";
 import { PLACEHOLDER } from "@/lib/images";
+import { withSlug } from "@/lib/slug";
 import { StarIcon } from "@/components/Icons";
 
-/** Poster card for AniList-backed anime items (links to /anime/{anilistId}). */
+/** Poster card for AniList-backed anime items (links to /anime/{slug}). */
 export default function AnimeCard({ item, className = "" }: { item: AnimeItem; className?: string }) {
   const score = item.averageScore != null ? (item.averageScore / 10).toFixed(1) : null;
   const cover = item.coverImage || PLACEHOLDER;
   const sub = item.nativeTitle && item.nativeTitle !== item.title ? item.nativeTitle : item.englishTitle;
+  const href = `/anime/${withSlug(item.id, item.title)}`;
 
   return (
     <div className={`group relative ${className}`}>
       <div className="relative aspect-[2/3] overflow-hidden rounded-xl bg-ink-800 ring-1 ring-white/10 transition duration-300 group-hover:ring-violet-500/40">
-        <Link href={`/anime/${item.id}`} className="absolute inset-0 block">
+        <Link href={href} className="absolute inset-0 block">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={cover}
@@ -40,7 +42,7 @@ export default function AnimeCard({ item, className = "" }: { item: AnimeItem; c
         </Link>
       </div>
 
-      <Link href={`/anime/${item.id}`} className="mt-2 block">
+      <Link href={href} className="mt-2 block">
         <h3 className="truncate text-sm font-semibold text-zinc-100 transition group-hover:text-white">
           {item.title}
         </h3>

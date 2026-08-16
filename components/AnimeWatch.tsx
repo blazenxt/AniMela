@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { api, AnimeEpisode } from "@/lib/api";
+import { withSlug } from "@/lib/slug";
 import { PlayIcon, StarIcon } from "./Icons";
 
 interface Server {
@@ -95,7 +96,7 @@ export default function AnimeWatch({
 
   useEffect(() => {
     loadServers(episode);
-    router.replace(`/anime/${anilistId}/watch?ep=${episode}`, { scroll: false });
+    router.replace(`/anime/${withSlug(anilistId, title)}/watch?ep=${episode}`, { scroll: false });
   }, [episode, loadServers, anilistId, router]);
 
   const pickServer = (s: Server) => {
@@ -116,7 +117,7 @@ export default function AnimeWatch({
     <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
       {/* breadcrumb */}
       <div className="mb-4 flex items-center gap-3 text-sm">
-        <Link href={`/anime/${anilistId}`} className="text-zinc-400 transition hover:text-white">
+        <Link href={`/anime/${withSlug(anilistId, title)}`} className="text-zinc-400 transition hover:text-white">
           ← {title}
         </Link>
         <span className="text-zinc-600">/</span>

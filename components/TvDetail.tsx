@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { useApi } from "@/lib/useApi";
@@ -13,10 +13,10 @@ import CastList from "@/components/CastList";
 import SimilarRow from "@/components/SimilarRow";
 import { backdrop, poster } from "@/lib/images";
 import { videasyTv } from "@/lib/players";
+import { withSlug } from "@/lib/slug";
 import { HeartIcon, StarIcon } from "@/components/Icons";
 
-export default function TvPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
+export default function TvDetail({ id }: { id: string }) {
   const router = useRouter();
   const { data, loading, error, retry } = useApi(() => api.tv(id), [id]);
   const { isWatched, toggleWatch, recordContinue } = useLibrary();
@@ -28,7 +28,6 @@ export default function TvPage({ params }: { params: Promise<{ id: string }> }) 
   const [season, setSeason] = useState<number>(defaultSeason);
   const [episode, setEpisode] = useState<number>(1);
 
-  // initialize from ?s=&e= deep link (client-side only)
   useEffect(() => {
     if (typeof window === "undefined") return;
     const p = new URLSearchParams(window.location.search);
@@ -45,10 +44,9 @@ export default function TvPage({ params }: { params: Promise<{ id: string }> }) 
   const select = (s: number, e: number) => {
     setSeason(s);
     setEpisode(e);
-    router.replace(`/tv/${id}?s=${s}&e=${e}`, { scroll: false });
+    router.replace(`/tv/${withSlug(id, data?.name)}?s=${s}&e=${e}`, { scroll: false });
   };
 
-  // remember where the user left off
   useEffect(() => {
     if (!data?.id) return;
     recordContinue({

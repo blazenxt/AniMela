@@ -10,6 +10,7 @@ import AnimeRow from "@/components/AnimeRow";
 import Loading from "@/components/Loading";
 import { MediaItem, itemTitle } from "@/lib/types";
 import { backdrop, poster } from "@/lib/images";
+import { withSlug } from "@/lib/slug";
 import { PlayIcon, SparklesIcon, StarIcon } from "@/components/Icons";
 
 export default function Home() {
@@ -73,7 +74,7 @@ export default function Home() {
 
               <div className="mt-6 flex flex-wrap gap-3">
                 <Link
-                  href={heroType === "tv" ? `/tv/${hero.id}` : `/movie/${hero.id}`}
+                  href={heroType === "tv" ? `/tv/${withSlug(hero.id, itemTitle(hero))}` : `/movie/${withSlug(hero.id, itemTitle(hero))}`}
                   className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-fuchsia-500 to-violet-600 px-6 py-3 font-bold text-white shadow-lg shadow-violet-900/50 transition hover:opacity-90"
                 >
                   <PlayIcon className="h-5 w-5" />
@@ -99,8 +100,8 @@ export default function Home() {
               {continueWatching.map((c) => {
                 const href =
                   c.type === "movie"
-                    ? `/movie/${c.id}`
-                    : `/tv/${c.id}?s=${c.season || 1}&e=${c.episode || 1}`;
+                    ? `/movie/${withSlug(c.id, c.title)}`
+                    : `/tv/${withSlug(c.id, c.title)}?s=${c.season || 1}&e=${c.episode || 1}`;
                 return (
                   <Link key={c.id} href={href} className="group block w-40 shrink-0 snap-start">
                     <div className="relative aspect-[2/3] overflow-hidden rounded-xl bg-white/5 ring-1 ring-white/10">
@@ -134,7 +135,7 @@ export default function Home() {
             </div>
             <div className="flex gap-4 overflow-x-auto pb-2 no-scrollbar">
               {watchlist.map((w) => {
-                const href = w.type === "movie" ? `/movie/${w.id}` : `/tv/${w.id}`;
+                const href = w.type === "movie" ? `/movie/${withSlug(w.id, w.title)}` : `/tv/${withSlug(w.id, w.title)}`;
                 return (
                   <Link key={w.id} href={href} className="group block w-40 shrink-0 snap-start">
                     <div className="relative aspect-[2/3] overflow-hidden rounded-xl bg-white/5 ring-1 ring-white/10">

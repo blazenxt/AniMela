@@ -1,16 +1,16 @@
 "use client";
 
-import { use, useEffect } from "react";
+import { useEffect } from "react";
 import Link from "next/link";
 import { api } from "@/lib/api";
 import { useApi } from "@/lib/useApi";
 import Loading from "@/components/Loading";
 import ErrorState from "@/components/ErrorState";
 import { formatLabel, statusLabel, stripHtml } from "@/lib/anilist";
+import { withSlug } from "@/lib/slug";
 import { ExternalLinkIcon, PlayIcon, StarIcon } from "@/components/Icons";
 
-export default function AnimePage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
+export default function AnimeDetail({ id }: { id: string }) {
   const { data, loading, error, retry } = useApi(() => api.animeDetail(id), [id]);
 
   useEffect(() => {
@@ -80,7 +80,7 @@ export default function AnimePage({ params }: { params: Promise<{ id: string }> 
             )}
 
             <Link
-              href={`/anime/${data.id}/watch`}
+              href={`/anime/${withSlug(data.id, data.title)}/watch`}
               className="mt-5 inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-fuchsia-500 to-violet-600 px-6 py-3 font-bold text-white shadow-lg shadow-violet-900/40 transition hover:opacity-90"
             >
               <PlayIcon className="h-5 w-5" />

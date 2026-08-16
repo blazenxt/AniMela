@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useEffect } from "react";
+import { useEffect } from "react";
 import { api } from "@/lib/api";
 import { useApi } from "@/lib/useApi";
 import { useLibrary } from "@/lib/library";
@@ -13,8 +13,7 @@ import { backdrop, poster } from "@/lib/images";
 import { videasyMovie, vidfastMovie } from "@/lib/players";
 import { ExternalLinkIcon, HeartIcon, StarIcon } from "@/components/Icons";
 
-export default function MoviePage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
+export default function MovieDetail({ id }: { id: string }) {
   const { data, loading, error, retry } = useApi(() => api.movie(id), [id]);
   const { isWatched, toggleWatch, recordContinue } = useLibrary();
 

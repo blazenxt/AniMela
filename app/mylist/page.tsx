@@ -3,10 +3,11 @@
 import Link from "next/link";
 import { useLibrary, WatchItem, ContinueItem } from "@/lib/library";
 import { poster } from "@/lib/images";
+import { withSlug } from "@/lib/slug";
 import { HeartIcon, XIcon } from "@/components/Icons";
 
 function WatchCard({ item }: { item: WatchItem }) {
-  const href = item.type === "movie" ? `/movie/${item.id}` : `/tv/${item.id}`;
+  const href = item.type === "movie" ? `/movie/${withSlug(item.id, item.title)}` : `/tv/${withSlug(item.id, item.title)}`;
   return (
     <Link href={href} className="group block w-40 shrink-0 snap-start">
       <div className="relative aspect-[2/3] overflow-hidden rounded-xl bg-white/5 ring-1 ring-white/10">
@@ -26,8 +27,8 @@ function WatchCard({ item }: { item: WatchItem }) {
 function ContinueCard({ item, onRemove }: { item: ContinueItem; onRemove: (id: number) => void }) {
   const href =
     item.type === "movie"
-      ? `/movie/${item.id}`
-      : `/tv/${item.id}?s=${item.season || 1}&e=${item.episode || 1}`;
+      ? `/movie/${withSlug(item.id, item.title)}`
+      : `/tv/${withSlug(item.id, item.title)}?s=${item.season || 1}&e=${item.episode || 1}`;
   return (
     <div className="group relative block w-40 shrink-0 snap-start">
       <Link href={href} className="block">

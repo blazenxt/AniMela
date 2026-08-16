@@ -3,13 +3,14 @@
 import Link from "next/link";
 import { itemTitle, itemType, itemYear, MediaItem } from "@/lib/types";
 import { poster } from "@/lib/images";
+import { withSlug } from "@/lib/slug";
 import { useLibrary, Kind } from "@/lib/library";
 import { HeartIcon, PlayIcon, StarIcon } from "@/components/Icons";
 
 export default function MediaCard({ item, className = "" }: { item: MediaItem; className?: string }) {
   const type = itemType(item);
   const kind: Kind = type === "movie" ? "movie" : "tv";
-  const href = type === "movie" ? `/movie/${item.id}` : `/tv/${item.id}`;
+  const href = type === "movie" ? `/movie/${withSlug(item.id, item.title)}` : `/tv/${withSlug(item.id, item.name)}`;
   const year = itemYear(item);
   const rating = item.vote_average;
   const title = itemTitle(item);
