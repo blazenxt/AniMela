@@ -18,6 +18,27 @@ import { HindiMovieDetail, HindiMovieItem, HindiMovieLink, MovieSourceProvider }
 const BASE = (process.env.SEVENHITMOVIES_BASE || "https://7hitmovies.net").replace(/\/+$/, "");
 const TIMEOUT_MS = 10000;
 
+/**
+ * Non-movie categories on the site (SEO spam / blog articles). Excluding these
+ * at the API level keeps the "recent" feed clean of marketing/health/tech
+ * articles that aren't movies or web series.
+ */
+const SPAM_CATEGORY_IDS = [50, 51, 52, 53, 54, 55, 56]; // Blog, Education, Sports, Health, Entertainment, Technology, Business
+const SPAM_EXCLUDE = SPAM_CATEGORY_IDS.join(",");
+
+/** Movie/series signal words — a second layer of defense (title-based). */
+const MOVIE_SIGNALS = [
+  /\(\d{4}\)/, // year in parens
+  /\b(1080p|720p|480p|2160p|4k|bluray|hdrip|webrip|web-dl|camrip|hdtc|hevc|x264|x265|esubs|org)\b/i,
+  /\b(movie|movies|film|dual audio|dubbed|dub|web series|series|season|episode|s\d{2}|e\d{2})\b/i,
+  /\b(hindi|bollywood|hollywood|tamil|telugu|punjabi|malayalam|kannada|marathi|gujarati|urdu|pakistani|bengali|south)\b/i,
+];
+
+/** True if a post title looks like an actual movie / web series. */
+function isMovieLike(title: string): boolean {
+  return MOVIE_SIGNALS.some((re) => re.test(title));
+}
+
 async function getJson<T = any>(path: string): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     headers: { Accept: "application/json" },
@@ -81,16 +102,16 @@ export const SevenHitMoviesProvider: MovieSourceProvider = {
 
   async search(query: string, page = 1): Promise<HindiMovieItem[]> {
     const d = await getJson<any[]>(
-      `/wp-json/wp/v2/posts?search=${encodeURIComponent(query)}&per_page=20&page=${page}&_embed`
+      `/wp-json/wp/v2/posts?search=${encodeURIComponent(query)}&per_page=20&page=${page}&categories_exclude=${SPAM_EXCLUDE}&_embed`
     );
-    return (d || []).map((p) => mapItem("sevenhitmovies", p));
+    return (d || []).map((p) => mapItem("sevenhitmovies", p)).filter((i) => isMovieLike(i.title));
   },
 
   async recent(page = 1): Promise<HindiMovieItem[]> {
     const d = await getJson<any[]>(
-      `/wp-json/wp/v2/posts?per_page=20&page=${page}&_embed`
+      `/wp-json/wp/v2/posts?per_page=30&page=${page}&categories_exclude=${SPAM_EXCLUDE}&_embed`
     );
-    return (d || []).map((p) => mapItem("sevenhitmovies", p));
+    return (d || []).map((p) => mapItem("sevenhitmovies", p)).filter((i) => isMovieLike(i.title));
   },
 
   async detail(id: string): Promise<HindiMovieDetail | null> {
