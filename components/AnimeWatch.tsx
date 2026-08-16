@@ -47,6 +47,17 @@ export default function AnimeWatch({
   const [loadingServer, setLoadingServer] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // ── episode range pagination (Animelok style: "EPS: 1-100") ──────────────
+  const RANGE = 100;
+  const totalEpisodes = episodes.length;
+  const rangeCount = Math.max(1, Math.ceil(totalEpisodes / RANGE));
+
+  // current range (0-based) derived from the selected episode
+  const rangeIndex = Math.min(rangeCount - 1, Math.floor((episode - 1) / RANGE));
+  const rangeStart = rangeIndex * RANGE + 1;
+  const rangeEnd = Math.min(totalEpisodes, rangeStart + RANGE - 1);
+  const visibleEpisodes = episodes.slice(rangeStart - 1, rangeEnd);
+
   // load episodes once
   useEffect(() => {
     let active = true;
@@ -93,7 +104,7 @@ export default function AnimeWatch({
   };
 
   const gotoEpisode = (n: number) => {
-    if (n < 1) return;
+    if (n < 1 || n > totalEpisodes) return;
     setEpisode(n);
   };
 
@@ -218,7 +229,7 @@ export default function AnimeWatch({
       )}
 
       {/* prev / next */}
-      <div className="mt-6 flex items-center gap-3">
+      <div className="mt-6 flex flex-wrap items-center gap-3">
         <button
           onClick={() => prevEp && gotoEpisode(prevEp.number)}
           disabled={!prevEp}
@@ -236,12 +247,33 @@ export default function AnimeWatch({
         {loadingServer && <span className="text-xs text-zinc-500">Loading servers…</span>}
       </div>
 
-      {/* episode grid */}
+      {/* episode list (Animelok-style ranged selector) */}
       {episodes.length > 0 && (
         <div className="mt-6">
-          <h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-zinc-400">Episodes</h3>
-          <div className="grid grid-cols-6 gap-2 sm:grid-cols-8 md:grid-cols-10 lg:grid-cols-12">
-            {episodes.map((ep) => (
+          <div className="mb-3 flex flex-wrap items-center gap-3">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400">List of episodes</h3>
+            <label className="flex items-center gap-2 text-sm text-zinc-300">
+              EPS:
+              <select
+                value={rangeIndex}
+                onChange={(e) => gotoEpisode(Number(e.target.value) * RANGE + 1)}
+                className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+              >
+                {Array.from({ length: rangeCount }).map((_, i) => {
+                  const s = i * RANGE + 1;
+                  const e = Math.min(totalEpisodes, s + RANGE - 1);
+                  return (
+                    <option key={i} value={i} className="bg-zinc-900">
+                      {s}-{e}
+                    </option>
+                  );
+                })}
+              </select>
+            </label>
+          </div>
+
+          <div className="grid grid-cols-6 gap-2 sm:grid-cols-8 md:grid-cols-10">
+            {visibleEpisodes.map((ep) => (
               <button
                 key={ep.id}
                 onClick={() => gotoEpisode(ep.number)}
