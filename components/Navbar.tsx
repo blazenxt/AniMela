@@ -9,7 +9,6 @@ const LINKS = [
   { href: "/movies", label: "Movies" },
   { href: "/series", label: "Series" },
   { href: "/anime", label: "Anime" },
-  { href: "/hindi", label: "Hindi Movies" },
   { href: "/genres", label: "Genres" },
   { href: "/mylist", label: "My List" },
 ];
