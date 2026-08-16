@@ -173,7 +173,7 @@ export default function AnimeWatch({
         <div className="flex items-center gap-2">
           <span className="text-base">🎧</span>
           <span className="text-sm font-semibold text-zinc-200">
-            Audio / language switch karne ke liye player ke andar headphones (🎧) button dabao
+            To switch audio / language, tap the headphones (🎧) button inside the player
           </span>
         </div>
         {languages.length > 0 && (
