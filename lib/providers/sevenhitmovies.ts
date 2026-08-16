@@ -39,7 +39,7 @@ const SPAM_EXCLUDE = SPAM_CATEGORY_IDS.join(",");
 const MOVIE_SIGNALS = [
   /\b(19|20)\d{2}\b/, // any 4-digit year
   /\b(1080p|720p|480p|2160p|4k|uhd|hd|bluray|hdrip|webrip|web-dl|camrip|hdtc|hevc|x264|x265|esubs|org|ds4k)\b/i,
-  /\b(movie|movies|film|dual audio|dubbed|dub|web series|series|season|episode|s\d{2}e\d{2}|s\d{2}|e\d{2}|complete)\b/i,
+  /\b(movie|movies|film|dual audio|dubbed|dub|web series|series|season|episode|s\d{2}e\d{2}|s\d{2}|e\d{2})\b/i,
 ];
 
 /** True if a post title looks like an actual movie / web series. */
