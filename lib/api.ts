@@ -230,6 +230,6 @@ export const api = {
     fetchV1(`/hindi/${provider}/${id}`),
   unshorten: (
     url: string
-  ): Promise<{ ok: boolean; originalUrl: string; resolvedUrl?: string; host?: string; method: "redirect" | "embedded" | "manual"; note?: string }> =>
+  ): Promise<{ ok: boolean; originalUrl: string; resolvedUrl?: string; host?: string; method: "adfly" | "gplinks" | "droplink" | "gdtot" | "sharer" | "appdrive" | "redirect" | "embedded" | "manual"; note?: string; chain?: string[] }> =>
     fetchV1(`/unshorten?url=${encodeURIComponent(url)}`),
 };

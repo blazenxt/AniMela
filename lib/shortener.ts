@@ -382,10 +382,75 @@ async function genericFallback(url: string, originalHost: string): Promise<Unsho
   }
 }
 
-// ── Dispatcher ──────────────────────────────────────────────────────────────
+// ── Terminal download hosts (stop following the chain here) ─────────────────
 
-export async function unshorten(url: string): Promise<UnshortenResult> {
-  const base: UnshortenResult = { ok: false, originalUrl: url, method: "manual" };
+const FINAL_HOSTS = [
+  "drive.google.com",
+  "docs.google.com",
+  "gofile.io",
+  "mega.nz",
+  "mediafire.com",
+  "terabox.com",
+  "pixeldrain.com",
+  "dropbox.com",
+];
+
+function isFinalHost(url: string): boolean {
+  const host = extractHost(url);
+  if (FINAL_HOSTS.some((h) => host === h || host.endsWith(`.${h}`))) return true;
+  // direct file URLs are terminal too
+  return /\.(mp4|mkv|avi|mov|wmv|flv|webm|zip|rar|7z|pdf|apk)([?#].*)?$/i.test(url);
+}
+
+const MAX_HOPS = 5;
+
+/** Resolve ONE hop. Returns `{ url?, method, note? }` — `url` may itself be a shortener. */
+async function resolveHop(
+  url: string
+): Promise<{ url?: string; method: UnshortenResult["method"]; note?: string }> {
+  const host = extractHost(url);
+
+  // dedicated handlers
+  if (/(^|\.)(gplinks\.|gtlinks\.me|gyanilinks\.|gplink\.)/.test(host)) {
+    const r = await bypassLinksGo(url);
+    if (r) return { url: r, method: "gplinks" };
+  }
+  if (/droplink/.test(host)) {
+    const r = await bypassLinksGo(url);
+    if (r) return { url: r, method: "droplink" };
+  }
+  if (/adf\.ly|adfly|j\.gs|q\.gs/.test(host)) {
+    const r = await bypassAdfly(url);
+    if (r) return { url: r, method: "adfly" };
+  }
+  if (/gdtot/.test(host)) {
+    const r = await bypassGdtot(url);
+    if (r) return { url: r, method: "gdtot" };
+  }
+  if (/sharer\.pw/.test(host)) {
+    const r = await bypassSharer(url);
+    if (r) return { url: r, method: "sharer" };
+  }
+  if (/appdrive|driveapp|drivehub|gdflix|drivesharer|drivebit|drivelinks|driveace|drivepro/.test(host)) {
+    const r = await bypassAppdrive(url);
+    if (r) return { url: r, method: "appdrive" };
+  }
+
+  // generic fallback
+  const g = await genericFallback(url, host);
+  if (g.ok && g.resolvedUrl) return { url: g.resolvedUrl, method: g.method };
+  return { method: "manual", note: g.note };
+}
+
+// ── Dispatcher (follows multi-hop chains) ───────────────────────────────────
+
+export interface UnshortenChainResult extends UnshortenResult {
+  /** The hops followed (original → … → final). */
+  chain?: string[];
+}
+
+export async function unshorten(url: string): Promise<UnshortenChainResult> {
+  const base: UnshortenChainResult = { ok: false, originalUrl: url, method: "manual" };
 
   let target: URL;
   try {
@@ -396,37 +461,45 @@ export async function unshorten(url: string): Promise<UnshortenResult> {
   if (target.protocol !== "https:" && target.protocol !== "http:") return { ...base, note: "bad protocol" };
   if (isPrivateHost(target.hostname)) return { ...base, note: "host not allowed" };
 
-  const host = extractHost(url);
-
-  try {
-    // dedicated free handlers first
-    if (/(^|\.)(gplinks\.|gtlinks\.me|gyanilinks\.|gplink\.)/.test(host)) {
-      const r = await bypassLinksGo(url);
-      if (r) return { ok: true, originalUrl: url, resolvedUrl: r, host: extractHost(r), method: "gplinks" };
-    }
-    if (/droplink/.test(host)) {
-      const r = await bypassLinksGo(url);
-      if (r) return { ok: true, originalUrl: url, resolvedUrl: r, host: extractHost(r), method: "droplink" };
-    }
-    if (/adf\.ly|adfly|j\.gs|q\.gs/.test(host)) {
-      const r = await bypassAdfly(url);
-      if (r) return { ok: true, originalUrl: url, resolvedUrl: r, host: extractHost(r), method: "adfly" };
-    }
-    if (/gdtot/.test(host)) {
-      const r = await bypassGdtot(url);
-      if (r) return { ok: true, originalUrl: url, resolvedUrl: r, host: extractHost(r), method: "gdtot" };
-    }
-    if (/sharer\.pw/.test(host)) {
-      const r = await bypassSharer(url);
-      if (r) return { ok: true, originalUrl: url, resolvedUrl: r, host: extractHost(r), method: "sharer" };
-    }
-    if (/appdrive|driveapp|drivehub|gdflix|drivesharer|drivebit|drivelinks|driveace|drivepro/.test(host)) {
-      const r = await bypassAppdrive(url);
-      if (r) return { ok: true, originalUrl: url, resolvedUrl: r, host: extractHost(r), method: "appdrive" };
-    }
-  } catch {
-    /* fall through to generic */
+  // already a terminal link (user pasted a direct file URL)?
+  if (isFinalHost(url)) {
+    return { ok: true, originalUrl: url, resolvedUrl: url, host: extractHost(url), method: "redirect", chain: [url] };
   }
 
-  return genericFallback(url, host);
+  const chain: string[] = [url];
+  let current = url;
+  let method: UnshortenResult["method"] = "manual";
+  let note: string | undefined;
+
+  for (let hop = 0; hop < MAX_HOPS; hop++) {
+    let hopResult: { url?: string; method: UnshortenResult["method"]; note?: string };
+    try {
+      hopResult = await resolveHop(current);
+    } catch (e) {
+      note = e instanceof Error ? e.message : "fetch failed";
+      break;
+    }
+
+    if (hopResult.url && hopResult.url !== current) {
+      current = hopResult.url;
+      method = hopResult.method;
+      if (!chain.includes(current)) chain.push(current);
+
+      if (isFinalHost(current)) {
+        return { ok: true, originalUrl: url, resolvedUrl: current, host: extractHost(current), method, chain };
+      }
+      continue; // follow the next hop
+    }
+
+    method = hopResult.method;
+    note = hopResult.note;
+    break;
+  }
+
+  // after following hops, current may now be terminal
+  if (current !== url && isFinalHost(current)) {
+    return { ok: true, originalUrl: url, resolvedUrl: current, host: extractHost(current), method, chain };
+  }
+
+  return { ...base, method, note: note || "no direct link found (likely captcha-gated)", chain };
 }
