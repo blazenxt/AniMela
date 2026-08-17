@@ -75,8 +75,8 @@ const ORDER = (process.env.ANIME_PROVIDER_ORDER || "anidb,animelok,animepahe")
 
 const FAIL_COOLDOWN_MS = 60_000; // skip a failing provider for 1 min
 
-/** provider id → timestamp until which it is skipped */
-const cooldown = new Map<string, number>();
+/** provider id → { until: skip-until timestamp, lastError: message } */
+const cooldown = new Map<string, { until: number; lastError: string }>();
 
 function providerList(): StreamProvider[] {
   // configured order first, then any remaining known providers, deduped
@@ -90,9 +90,10 @@ function providerList(): StreamProvider[] {
   return out;
 }
 
-function healthy(p: StreamProvider): boolean {
-  const until = cooldown.get(p.id) || 0;
-  return Date.now() > until;
+function healthy(p: StreamProvider): { ok: boolean; lastError?: string } {
+  const entry = cooldown.get(p.id);
+  if (!entry || Date.now() > entry.until) return { ok: true };
+  return { ok: false, lastError: entry.lastError };
 }
 
 /** Per-provider failure details (surfaced in API responses for debugging). */
@@ -112,12 +113,13 @@ async function attempt<T>(
       cooldown.delete(p.id);
       return result;
     }
-    cooldown.set(p.id, Date.now() + FAIL_COOLDOWN_MS);
+    cooldown.set(p.id, { until: Date.now() + FAIL_COOLDOWN_MS, lastError: "no result" });
     errors.push({ provider: p.id, error: "no result" });
     return null;
   } catch (e) {
-    cooldown.set(p.id, Date.now() + FAIL_COOLDOWN_MS);
-    errors.push({ provider: p.id, error: e instanceof Error ? e.message : String(e) });
+    const msg = e instanceof Error ? e.message : String(e);
+    cooldown.set(p.id, { until: Date.now() + FAIL_COOLDOWN_MS, lastError: msg });
+    errors.push({ provider: p.id, error: msg });
     return null;
   }
 }
@@ -131,8 +133,9 @@ export interface EpisodeListResult {
 export async function listEpisodes(ref: AnimeRef): Promise<EpisodeListResult> {
   const errors: ProviderError[] = [];
   for (const p of providerList()) {
-    if (!healthy(p)) {
-      errors.push({ provider: p.id, error: "cooling down" });
+    const h = healthy(p);
+    if (!h.ok) {
+      errors.push({ provider: p.id, error: `cooling down (last: ${h.lastError})` });
       continue;
     }
     const eps = await attempt(p, () => p.listEpisodes(ref), errors);
@@ -154,8 +157,9 @@ export async function resolveEpisode(
 ): Promise<StreamResolution> {
   const errors: ProviderError[] = [];
   for (const p of providerList()) {
-    if (!healthy(p)) {
-      errors.push({ provider: p.id, error: "cooling down" });
+    const h = healthy(p);
+    if (!h.ok) {
+      errors.push({ provider: p.id, error: `cooling down (last: ${h.lastError})` });
       continue;
     }
     const result = await attempt(p, () => p.resolveEpisode(ref, episode, dub), errors);
@@ -168,7 +172,7 @@ export async function resolveEpisode(
 export async function searchAnime(query: string): Promise<AnimeRef[]> {
   const errors: ProviderError[] = [];
   for (const p of providerList()) {
-    if (!healthy(p)) continue;
+    if (!healthy(p).ok) continue;
     const results = await attempt(p, () => p.searchAnime(query), errors);
     if (results && results.length) return results;
   }

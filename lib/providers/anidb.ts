@@ -56,6 +56,29 @@ interface AnidbAnime {
   title: string;
 }
 
+/**
+ * Parse search results from the browse page HTML.
+ *
+ * Each result is an `<a href="…/anime/{slug-id}" title="{title}">…</a>` block
+ * (the title may live in the anchor's `title` attr or the nested img's `alt`).
+ * We split on `<a` boundaries (like ani-cli) so nested attrs are captured.
+ */
+function parseSearch(html: string): AnidbAnime[] {
+  const blocks = html.split(/<a\b/i).slice(1);
+  const out: AnidbAnime[] = [];
+  for (const block of blocks) {
+    const href = block.match(/href="[^"]*\/anime\/([a-z0-9-]+-\d+)"/i)?.[1];
+    if (!href) continue;
+    // title is on the anchor; fall back to nested img alt
+    const title =
+      block.match(/title="([^"]+)"/)?.[1] || block.match(/alt="([^"]+)"/)?.[1] || "";
+    const numericId = href.match(/(\d+)$/)?.[1] || href;
+    const clean = title.replace(/&#039;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, "&");
+    if (clean && !out.some((r) => r.id === href)) out.push({ id: href, numericId, title: clean });
+  }
+  return out;
+}
+
 // in-memory title → anime cache
 const cache = new Map<string, AnidbAnime>();
 
@@ -66,15 +89,7 @@ async function resolveAnimeId(ref: AnimeRef): Promise<AnidbAnime | null> {
   if (hit) return hit;
 
   const html = await getText(`/browse?q=${encodeURIComponent(ref.title)}`);
-  const results: AnidbAnime[] = [];
-  const re = /anime\/([a-z0-9-]+-\d+)"[^>]*alt="([^"]+)"/gi;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(html)) !== null) {
-    const id = m[1];
-    const title = m[2].replace(/&#039;/g, "'").replace(/&quot;/g, '"');
-    const numericId = id.match(/(\d+)$/)?.[1] || id;
-    if (!results.some((r) => r.id === id)) results.push({ id, numericId, title });
-  }
+  const results = parseSearch(html);
   if (!results.length) return null;
 
   const target = norm(ref.title);
@@ -124,14 +139,7 @@ export const AniDBProvider: StreamProvider = {
 
   async searchAnime(query: string): Promise<AnimeRef[]> {
     const html = await getText(`/browse?q=${encodeURIComponent(query)}`);
-    const out: AnimeRef[] = [];
-    const re = /anime\/([a-z0-9-]+-\d+)"[^>]*alt="([^"]+)"/gi;
-    let m: RegExpExecArray | null;
-    while ((m = re.exec(html)) !== null) {
-      const title = m[2].replace(/&#039;/g, "'").replace(/&quot;/g, '"');
-      if (title && !out.some((r) => r.title === title)) out.push({ title });
-    }
-    return out.slice(0, 20);
+    return parseSearch(html).slice(0, 20).map((r) => ({ title: r.title }));
   },
 
   async listEpisodes(ref: AnimeRef): Promise<AnimeEpisode[] | null> {
