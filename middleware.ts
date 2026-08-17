@@ -305,6 +305,15 @@ export async function middleware(req: NextRequest) {
   const ua = req.headers.get("user-agent") || "";
   const isApi = pathname.startsWith("/api/");
 
+  // Healthcheck + HLS proxy must NEVER be blocked — Railway's healthcheck is a
+  // plain HTTP client (no browser headers) and the HLS proxy streams video
+  // segments that legitimately lack browser headers. Exempt both fully.
+  if (pathname === "/api/health" || pathname === "/api/hls") {
+    const res = NextResponse.next();
+    for (const [k, v] of Object.entries(SECURITY_HEADERS)) res.headers.set(k, v);
+    return res;
+  }
+
   // 1. Perma-ban (memory, then Redis for cross-restart persistence)
   if (banned.has(ip) || (await redisSismember(ip))) {
     return blockResponse(403, "Access denied.");
