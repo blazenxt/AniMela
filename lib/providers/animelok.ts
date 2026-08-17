@@ -19,6 +19,7 @@
 import { AnimeEpisode, AnimeRef, StreamProvider, StreamResult } from "../anime-stream";
 import { decryptFlixcloud } from "../flixcloud-decrypt";
 import { encryptUrl } from "../obfuscate";
+import { proxiedFetch } from "../proxy-fetch";
 
 const BASE = (process.env.ANIMELOK_BASE || "https://animelok.live").replace(/\/+$/, "");
 const TIMEOUT_MS = 15000;
@@ -194,7 +195,7 @@ function qualityLabel(h: number): string {
  */
 async function parseFlixMaster(master: string, referer: string): Promise<{ quality: string; url: string }[]> {
   try {
-    const pl = await (await fetch(master, {
+    const pl = await (await proxiedFetch(master, {
       headers: { "User-Agent": UA, Referer: referer },
       signal: AbortSignal.timeout(TIMEOUT_MS),
     })).text();

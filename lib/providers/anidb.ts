@@ -17,6 +17,7 @@
  */
 
 import { AnimeEpisode, AnimeRef, StreamProvider, StreamResult } from "../anime-stream";
+import { proxiedFetch } from "../proxy-fetch";
 
 const BASE = (process.env.ANIDB_BASE || "https://anidb.app").replace(/\/+$/, "");
 const TIMEOUT_MS = 15000;
@@ -26,7 +27,7 @@ const UA =
 
 async function getText(path: string): Promise<string> {
   const url = /^https?:\/\//.test(path) ? path : `${BASE}${path}`;
-  const res = await fetch(url, {
+  const res = await proxiedFetch(url, {
     headers: { "User-Agent": UA, Accept: "text/html,application/xhtml+xml,*/*" },
     signal: AbortSignal.timeout(TIMEOUT_MS),
     cache: "no-store",
@@ -37,7 +38,7 @@ async function getText(path: string): Promise<string> {
 
 async function getJson<T = any>(path: string): Promise<T> {
   const url = /^https?:\/\//.test(path) ? path : `${BASE}${path}`;
-  const res = await fetch(url, {
+  const res = await proxiedFetch(url, {
     headers: { "User-Agent": UA, Accept: "application/json, */*" },
     signal: AbortSignal.timeout(TIMEOUT_MS),
     cache: "no-store",

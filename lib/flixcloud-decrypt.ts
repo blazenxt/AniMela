@@ -18,6 +18,7 @@
  */
 
 import crypto from "crypto";
+import { proxiedFetch } from "./proxy-fetch";
 
 const FLIX = "https://flixcloud.cc";
 
@@ -116,7 +117,7 @@ export async function decryptFlixcloud(
   v: number,
   referer: string
 ): Promise<DecryptedStream> {
-  const embedRes = await fetch(`${FLIX}/e/${accessId}?v=${v}`, {
+  const embedRes = await proxiedFetch(`${FLIX}/e/${accessId}?v=${v}`, {
     headers: { "User-Agent": UA, Referer: referer },
     signal: AbortSignal.timeout(15000),
     cache: "no-store",
@@ -138,7 +139,7 @@ export async function decryptFlixcloud(
 
   if (!token) throw new Error("Token field missing from embed data");
 
-  const tokRes = await fetch(`${FLIX}/api/m3u8/${token}`, {
+  const tokRes = await proxiedFetch(`${FLIX}/api/m3u8/${token}`, {
     headers: { "User-Agent": UA, Referer: referer },
     signal: AbortSignal.timeout(15000),
     cache: "no-store",

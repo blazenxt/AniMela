@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { proxiedFetch } from "@/lib/proxy-fetch";
 
 /**
  * Same-origin HLS proxy.
@@ -8,7 +9,8 @@ import { NextRequest } from "next/server";
  * is bound to *our* server IP, so the visitor's browser can't fetch the stream
  * directly — it gets blocked. This proxy fetches the playlist + segments from
  * our server (matching IP) and rewrites the URLs so the browser only ever talks
- * to us.
+ * to us. When ANIME_PROXY is set, those outbound fetches go through the
+ * residential proxy so the CDN's Cloudflare lets them through.
  *
  *   GET /api/hls?url={encoded_m3u8_or_segment}&referer={encoded_referer}
  *
@@ -83,7 +85,7 @@ export async function GET(req: NextRequest) {
   const headers: Record<string, string> = { "User-Agent": UA };
   if (referer) headers["Referer"] = referer;
 
-  const upstream = await fetch(target.toString(), {
+  const upstream = await proxiedFetch(target.toString(), {
     headers,
     signal: AbortSignal.timeout(20000),
     cache: "no-store",
