@@ -1,7 +1,5 @@
 import { animeDetail } from "@/lib/anime-meta";
 import { listAnimelokServers, listAnimelokLanguages } from "@/lib/providers/animelok";
-import { resolveEpisode } from "@/lib/anime-stream";
-import { encryptUrl } from "@/lib/obfuscate";
 import { ok, fail, options } from "@/lib/api-response";
 
 export const dynamic = "force-dynamic";
@@ -10,11 +8,11 @@ export const maxDuration = 60;
 /**
  * GET /api/v1/anime/{anilistId}/servers?ep={n}
  *
- * Returns:
- *   - `servers`: iframe-embed servers (Animelok/flixcloud) + a "Direct" entry
- *     with quality variants when the AniDB direct stream resolves (→ CustomPlayer
- *     with the quality selector).
- *   - `languages`: available audio languages.
+ * Returns the iframe-embed servers (Animelok/flixcloud) + available audio
+ * languages. Direct m3u8 playback is intentionally NOT offered: flixcloud's
+ * stream URLs are IP-bound to the decryptor (our datacenter IP), and their
+ * video CDN Cloudflare-blocks datacenter IPs — so direct playback 403s from
+ * Railway. The iframe embed plays fine because it runs on the user's IP.
  */
 export async function GET(
   req: Request,
@@ -43,34 +41,10 @@ export async function GET(
       format: detail.format ?? undefined,
     };
 
-    const [animelokServers, languages, directResolution] = await Promise.all([
+    const [servers, languages] = await Promise.all([
       listAnimelokServers(detail.id, ep),
       listAnimelokLanguages(ref),
-      resolveEpisode(ref, ep, false),
     ]);
-
-    // Build the server list: direct stream (qualities) first, then iframe embeds.
-    const servers: any[] = [];
-
-    if (directResolution?.result?.sources?.length) {
-      const r = directResolution.result;
-      const referer = r.headers?.Referer || "";
-      servers.push({
-        name: `${r.provider} (Direct)`,
-        type: "multi" as const,
-        token: "",
-        audioTracks: ["Japanese", "English"],
-        qualities: r.sources.map((s) => ({
-          quality: s.quality,
-          token: encryptUrl(s.url),
-        })),
-        referer: referer ? encryptUrl(referer) : undefined,
-      });
-    }
-
-    for (const s of animelokServers) {
-      servers.push(s);
-    }
 
     return ok({ available: servers.length > 0, servers, languages });
   } catch (e) {
