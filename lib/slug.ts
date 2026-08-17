@@ -17,18 +17,22 @@ function noise40(input: string): string {
   let b = 0x9e3779b9;
   let c = 0x85ebca6b;
   let d = 0xc2b2ae35;
+  let e = 0x27d4eb2f;
   for (let i = 0; i < input.length; i++) {
     const ch = input.charCodeAt(i);
     a = Math.imul(a ^ ch, 0x01000193) >>> 0;
     b = Math.imul(b ^ ch, 0x5bd1e995) >>> 0;
     c = Math.imul(c ^ ch, 0x85ebca6b) >>> 0;
     d = Math.imul(d ^ ch, 0xc2b2ae35) >>> 0;
+    e = Math.imul(e ^ ch, 0x27d4eb2f) >>> 0;
   }
+  // 5 × 8 hex chars = 40 chars
   return (
     a.toString(16).padStart(8, "0") +
     b.toString(16).padStart(8, "0") +
     c.toString(16).padStart(8, "0") +
-    d.toString(16).padStart(8, "0")
+    d.toString(16).padStart(8, "0") +
+    e.toString(16).padStart(8, "0")
   ).slice(0, 40);
 }
 
