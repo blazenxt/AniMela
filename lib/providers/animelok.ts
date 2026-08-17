@@ -18,6 +18,7 @@
 
 import { AnimeEpisode, AnimeRef, StreamProvider, StreamResult } from "../anime-stream";
 import { decryptFlixcloud } from "../flixcloud-decrypt";
+import { encryptUrl } from "../obfuscate";
 
 const BASE = (process.env.ANIMELOK_BASE || "https://animelok.live").replace(/\/+$/, "");
 const TIMEOUT_MS = 15000;
@@ -123,7 +124,8 @@ interface FlixServer {
 export interface AnimelokServer {
   name: string; // "HD-1" | "HD-2"
   type: "multi"; // flixcloud streams are multi-audio (Japanese + English)
-  embedUrl: string; // iframe embed URL (plays on the user's IP)
+  /** Opaque token resolving to the embed URL (obfuscated — not the real host). */
+  token: string;
   /** Audio tracks available inside this stream (switchable via player 🎧). */
   audioTracks: string[];
 }
@@ -157,7 +159,7 @@ export async function listAnimelokServers(
     out.push({
       name: s.serverName,
       type: "multi",
-      embedUrl: s.dataLink,
+      token: encryptUrl(s.dataLink), // obfuscate the flixcloud host
       audioTracks: ["Japanese", "English"],
     });
   }

@@ -1,5 +1,6 @@
 import { animeDetail } from "@/lib/anime-meta";
 import { resolveEpisode } from "@/lib/anime-stream";
+import { encryptUrl } from "@/lib/obfuscate";
 import { ok, fail, options } from "@/lib/api-response";
 
 export const dynamic = "force-dynamic";
@@ -47,7 +48,31 @@ export async function GET(
     if (!result) {
       return ok({ available: false, reason: "No playable source found", errors });
     }
-    return ok({ available: true, ...result, errors });
+
+    // Obfuscate every external URL before it leaves the API: the client only
+    // ever sees opaque tokens, never the real source hosts.
+    const sources = (result.sources || []).map((s) => ({
+      ...s,
+      url: encryptUrl(s.url),
+    }));
+    const subtitles = (result.subtitles || []).map((t) => ({
+      ...t,
+      url: encryptUrl(t.url),
+    }));
+    const headers: Record<string, string> = {};
+    for (const [k, v] of Object.entries(result.headers || {})) {
+      headers[k] = /url|referer|origin/i.test(k) ? encryptUrl(v) : v;
+    }
+
+    return ok({
+      available: true,
+      ...result,
+      sources,
+      subtitles,
+      headers,
+      embedUrl: result.embedUrl ? encryptUrl(result.embedUrl) : undefined,
+      errors,
+    });
   } catch (e) {
     return fail(502, e instanceof Error ? e.message : "Upstream error");
   }

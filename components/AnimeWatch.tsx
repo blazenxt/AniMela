@@ -10,7 +10,7 @@ import { PlayIcon, StarIcon } from "./Icons";
 interface Server {
   name: string;
   type: "multi";
-  embedUrl: string;
+  token: string;
   audioTracks: string[];
 }
 
@@ -44,6 +44,8 @@ export default function AnimeWatch({
   const [languages, setLanguages] = useState<Language[]>([]);
   const [episode, setEpisode] = useState<number>(Number(sp.get("ep")) || 1);
   const [server, setServer] = useState<Server | null>(null);
+  const [resolvedUrl, setResolvedUrl] = useState<string | null>(null);
+  const [resolving, setResolving] = useState(false);
   const [started, setStarted] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadingServer, setLoadingServer] = useState(false);
@@ -72,6 +74,23 @@ export default function AnimeWatch({
     };
   }, [anilistId]);
 
+  // Resolve an opaque server token into its real player URL.
+  const resolveToken = useCallback(async (s: Server | null) => {
+    if (!s?.token) {
+      setResolvedUrl(null);
+      return;
+    }
+    setResolving(true);
+    try {
+      const d = await api.resolveEmbed(s.token);
+      setResolvedUrl(d.url || null);
+    } catch {
+      setResolvedUrl(null);
+    } finally {
+      setResolving(false);
+    }
+  }, []);
+
   // load servers + languages per episode
   const loadServers = useCallback(
     async (ep: number) => {
@@ -82,16 +101,19 @@ export default function AnimeWatch({
         const d = await api.animeServers(anilistId, ep);
         setServers(d.servers || []);
         setLanguages(d.languages || []);
-        setServer(d.servers?.[0] || null);
+        const def = d.servers?.[0] || null;
+        setServer(def);
+        await resolveToken(def);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Failed to load servers");
         setServers([]);
         setServer(null);
+        setResolvedUrl(null);
       } finally {
         setLoading(false);
       }
     },
-    [anilistId]
+    [anilistId, resolveToken]
   );
 
   useEffect(() => {
@@ -102,6 +124,7 @@ export default function AnimeWatch({
   const pickServer = (s: Server) => {
     setServer(s);
     setStarted(false);
+    resolveToken(s);
   };
 
   const gotoEpisode = (n: number) => {
@@ -134,11 +157,11 @@ export default function AnimeWatch({
         className="relative w-full overflow-hidden rounded-2xl bg-black ring-1 ring-white/10"
         style={{ aspectRatio: "16 / 9" }}
       >
-        {server ? (
+        {server && resolvedUrl ? (
           started ? (
             <iframe
-              key={`${server.embedUrl}:${episode}`}
-              src={server.embedUrl}
+              key={`${resolvedUrl}:${episode}`}
+              src={resolvedUrl}
               allow="autoplay; fullscreen; encrypted-media; picture-in-picture; clipboard-write"
               allowFullScreen
               className="absolute inset-0 h-full w-full border-0"
@@ -158,7 +181,7 @@ export default function AnimeWatch({
               </span>
             </button>
           )
-        ) : loading ? (
+        ) : loading || resolving ? (
           <div className="flex h-full items-center justify-center">
             <div className="h-10 w-10 animate-spin rounded-full border-2 border-white/20 border-t-white" />
           </div>
