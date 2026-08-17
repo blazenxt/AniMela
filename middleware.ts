@@ -271,13 +271,14 @@ function prune() {
 }
 
 function missingBrowserHeaders(req: NextRequest): boolean {
-  const ua = req.headers.get("user-agent") || "";
   const accept = req.headers.get("accept") || "";
   const acceptLanguage = req.headers.get("accept-language") || "";
-  if (!accept || !acceptLanguage) return true;
-  if (!/text\/html/.test(accept)) return true;
-  const secFetch = req.headers.get("sec-fetch-mode");
-  if (ua && !secFetch && !/health|api\/hls/.test(req.nextUrl.pathname)) return true;
+  // Real browsers ALWAYS send both Accept and Accept-Language on every request
+  // (page navigations AND fetch/XHR). Most HTTP-client bots omit one or both.
+  // NOTE: do NOT require "text/html" in Accept — browser fetch() to APIs sends
+  // "Accept: */*" or "application/json", which is legitimate.
+  if (!accept) return true;
+  if (!acceptLanguage) return true;
   return false;
 }
 
@@ -305,10 +306,12 @@ export async function middleware(req: NextRequest) {
   const ua = req.headers.get("user-agent") || "";
   const isApi = pathname.startsWith("/api/");
 
-  // Healthcheck + HLS proxy must NEVER be blocked — Railway's healthcheck is a
-  // plain HTTP client (no browser headers) and the HLS proxy streams video
-  // segments that legitimately lack browser headers. Exempt both fully.
-  if (pathname === "/api/health" || pathname === "/api/hls") {
+  // Healthcheck, HLS proxy, and the Turnstile verify endpoint must NEVER be
+  // blocked. Railway's healthcheck is a plain HTTP client (no browser headers),
+  // the HLS proxy streams segments without browser headers, and /api/verify is
+  // the endpoint the challenge page POSTs its Turnstile token to — blocking it
+  // would make verification impossible.
+  if (pathname === "/api/health" || pathname === "/api/hls" || pathname === "/api/verify") {
     const res = NextResponse.next();
     for (const [k, v] of Object.entries(SECURITY_HEADERS)) res.headers.set(k, v);
     return res;
