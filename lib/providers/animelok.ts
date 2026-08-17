@@ -128,6 +128,10 @@ export interface AnimelokServer {
   token: string;
   /** Audio tracks available inside this stream (switchable via player 🎧). */
   audioTracks: string[];
+  /** Direct HLS quality variants (if decryption succeeded), as opaque tokens. */
+  qualities?: { quality: string; token: string }[];
+  /** Required Referer for the direct stream (obfuscated). */
+  referer?: string;
 }
 
 /** Fetch flixcloud server list for an episode via Animelok's API. */
@@ -138,12 +142,63 @@ async function getFlixServers(anilistId: number, episode: number): Promise<FlixS
 }
 
 /**
+ * Decrypt a flixcloud server's stream and parse its HLS master playlist into
+ * quality variants. Returns null if decryption or the CDN fetch fails (the
+ * client then falls back to the iframe embed).
+ */
+async function resolveDirectQualities(
+  dataLink: string
+): Promise<{ qualities: { quality: string; token: string }[]; referer: string } | null> {
+  const parsed = parseDataLink(dataLink);
+  if (!parsed) return null;
+  try {
+    const decrypted = await decryptFlixcloud(parsed.accessId, parsed.v, `${BASE}/`);
+    const master = decrypted.url;
+    const referer = `${BASE}/`;
+
+    // fetch the master playlist (our IP holds the valid token) and parse variants
+    const pl = await (await fetch(master, {
+      headers: { "User-Agent": UA, Referer: referer },
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    })).text();
+
+    const lines = pl.split("\n");
+    const qualities: { quality: string; token: string }[] = [];
+    for (let i = 0; i < lines.length; i++) {
+      const m = lines[i].match(/RESOLUTION=(\d+)x(\d+)/i);
+      if (m) {
+        const uri = lines[i + 1]?.trim();
+        if (uri && !uri.startsWith("#")) {
+          const h = Number(m[2]);
+          let label = `${h}p`;
+          if (h >= 2160) label = "4K";
+          else if (h >= 1080) label = "1080p";
+          else if (h >= 720) label = "720p";
+          else if (h >= 480) label = "480p";
+          else if (h >= 360) label = "360p";
+          const abs = new URL(uri, master).toString();
+          if (!qualities.some((q) => q.quality === label)) {
+            qualities.push({ quality: label, token: encryptUrl(abs) });
+          }
+        }
+      }
+    }
+
+    if (!qualities.length) return null;
+    return { qualities, referer: encryptUrl(referer) };
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Return the deduped server options for an episode.
  *
  * flixcloud's `sub` and `dub` entries share the SAME dataLink — the stream is
  * multi-audio (Japanese + English), switched inside the player via the 🎧
- * button. We therefore expose one server per host (HD-1 / HD-2) rather than
- * fake sub/dub duplicates, and list the audio tracks explicitly.
+ * button. We expose one server per host (HD-1 / HD-2) with:
+ *   - `token` (iframe embed URL, obfuscated) as the reliable fallback
+ *   - `qualities` (direct HLS variants, obfuscated) for the custom player
  */
 export async function listAnimelokServers(
   anilistId: number,
@@ -156,11 +211,15 @@ export async function listAnimelokServers(
   for (const s of flixServers) {
     if (seen.has(s.serverName)) continue;
     seen.add(s.serverName);
+
+    const direct = await resolveDirectQualities(s.dataLink);
     out.push({
       name: s.serverName,
       type: "multi",
-      token: encryptUrl(s.dataLink), // obfuscate the flixcloud host
+      token: encryptUrl(s.dataLink),
       audioTracks: ["Japanese", "English"],
+      qualities: direct?.qualities,
+      referer: direct?.referer,
     });
   }
 

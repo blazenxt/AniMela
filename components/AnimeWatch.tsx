@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { api, AnimeEpisode } from "@/lib/api";
 import { withSlug } from "@/lib/slug";
+import CustomPlayer, { Source } from "./CustomPlayer";
 import { PlayIcon, StarIcon } from "./Icons";
 
 interface Server {
@@ -12,6 +13,8 @@ interface Server {
   type: "multi";
   token: string;
   audioTracks: string[];
+  qualities?: { quality: string; token: string }[];
+  referer?: string;
 }
 
 interface Language {
@@ -45,6 +48,7 @@ export default function AnimeWatch({
   const [episode, setEpisode] = useState<number>(Number(sp.get("ep")) || 1);
   const [server, setServer] = useState<Server | null>(null);
   const [resolvedUrl, setResolvedUrl] = useState<string | null>(null);
+  const [directSources, setDirectSources] = useState<Source[]>([]);
   const [resolving, setResolving] = useState(false);
   const [started, setStarted] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -74,18 +78,41 @@ export default function AnimeWatch({
     };
   }, [anilistId]);
 
-  // Resolve an opaque server token into its real player URL.
-  const resolveToken = useCallback(async (s: Server | null) => {
-    if (!s?.token) {
-      setResolvedUrl(null);
-      return;
-    }
+  // Resolve a server into its playback URL(s). Prefers direct HLS qualities
+  // (for our custom player + quality menu); falls back to the iframe embed.
+  const resolveServer = useCallback(async (s: Server | null) => {
+    setResolvedUrl(null);
+    setDirectSources([]);
+    if (!s) return;
     setResolving(true);
     try {
-      const d = await api.resolveEmbed(s.token);
-      setResolvedUrl(d.url || null);
+      // direct qualities (custom player with quality selector)
+      if (s.qualities && s.qualities.length) {
+        const referer = s.referer
+          ? (await api.resolveEmbed(s.referer)).url
+          : "";
+        const sources: Source[] = [];
+        for (const q of s.qualities) {
+          const d = await api.resolveEmbed(q.token);
+          const url = referer
+            ? `/api/hls?url=${encodeURIComponent(d.url)}&referer=${encodeURIComponent(referer)}`
+            : d.url;
+          sources.push({ quality: q.quality, url });
+        }
+        setDirectSources(sources);
+      } else {
+        // iframe embed fallback
+        const d = await api.resolveEmbed(s.token);
+        setResolvedUrl(d.url || null);
+      }
     } catch {
-      setResolvedUrl(null);
+      // fall back to iframe on any error
+      try {
+        const d = await api.resolveEmbed(s.token);
+        setResolvedUrl(d.url || null);
+      } catch {
+        setResolvedUrl(null);
+      }
     } finally {
       setResolving(false);
     }
@@ -103,17 +130,18 @@ export default function AnimeWatch({
         setLanguages(d.languages || []);
         const def = d.servers?.[0] || null;
         setServer(def);
-        await resolveToken(def);
+        await resolveServer(def);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Failed to load servers");
         setServers([]);
         setServer(null);
         setResolvedUrl(null);
+        setDirectSources([]);
       } finally {
         setLoading(false);
       }
     },
-    [anilistId, resolveToken]
+    [anilistId, resolveServer]
   );
 
   useEffect(() => {
@@ -124,7 +152,7 @@ export default function AnimeWatch({
   const pickServer = (s: Server) => {
     setServer(s);
     setStarted(false);
-    resolveToken(s);
+    resolveServer(s);
   };
 
   const gotoEpisode = (n: number) => {
@@ -157,7 +185,12 @@ export default function AnimeWatch({
         className="relative w-full overflow-hidden rounded-2xl bg-black ring-1 ring-white/10"
         style={{ aspectRatio: "16 / 9" }}
       >
-        {server && resolvedUrl ? (
+        {server && directSources.length > 0 ? (
+          // direct HLS stream → custom player with quality selector
+          <div className="absolute inset-0">
+            <CustomPlayer sources={directSources} />
+          </div>
+        ) : server && resolvedUrl ? (
           started ? (
             <iframe
               key={`${resolvedUrl}:${episode}`}

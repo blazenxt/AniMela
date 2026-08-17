@@ -228,7 +228,14 @@ export const api = {
     episode: number
   ): Promise<{
     available: boolean;
-    servers: { name: string; type: "multi"; token: string; audioTracks: string[] }[];
+    servers: {
+      name: string;
+      type: "multi";
+      token: string;
+      audioTracks: string[];
+      qualities?: { quality: string; token: string }[];
+      referer?: string;
+    }[];
     languages: { code: string; label: string; episodes?: number | null }[];
   }> => fetchV1(`/anime/${id}/servers?ep=${episode}`),
   /** Decrypt an opaque server token back into its player URL. */
