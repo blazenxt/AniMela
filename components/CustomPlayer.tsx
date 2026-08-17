@@ -26,6 +26,20 @@ function fmt(t: number): string {
   return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
 }
 
+/** Normalize a quality label to a comparable rank number. */
+function qualityRank(q: string): number {
+  const s = q.toLowerCase();
+  if (s.includes("4k") || s.includes("2160")) return 6;
+  if (s.includes("1080")) return 5;
+  if (s.includes("720")) return 4;
+  if (s.includes("480")) return 3;
+  if (s.includes("360")) return 2;
+  if (s.includes("240") || s.includes("144")) return 1;
+  return 0; // "auto", "default", unknown
+}
+
+const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2];
+
 export default function CustomPlayer({ sources, headers, subtitles }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -39,28 +53,25 @@ export default function CustomPlayer({ sources, headers, subtitles }: Props) {
   const [muted, setMuted] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(true);
   const [quality, setQuality] = useState(0);
+  const [speed, setSpeed] = useState(1);
+  const [menu, setMenu] = useState<null | "quality" | "speed">(null);
   const [error, setError] = useState<string | null>(null);
 
   const hlsRef = useRef<Hls | null>(null);
 
-  // sort sources: prefer 720P / 1080P first
-  const sorted = useCallback((list: Source[]) => {
-    const rank: Record<string, number> = { "1080": 5, "720": 4, "480": 3, "360": 2, "240": 1 };
-    return [...list].sort((a, b) => {
-      const ra = rank[a.quality.toUpperCase().replace(/[P]/, "")] || 0;
-      const rb = rank[b.quality.toUpperCase().replace(/[P]/, "")] || 0;
-      return rb - ra;
-    });
-  }, []);
-
-  const [list] = useState<Source[]>(() => sorted(sources));
+  // sort sources: highest quality first (auto/default stay at the front)
+  const list = useState<Source[]>(() => {
+    const ranked = [...sources].map((s) => ({ s, r: qualityRank(s.quality) }));
+    const autos = ranked.filter((x) => x.r === 0);
+    const rest = ranked.filter((x) => x.r > 0).sort((a, b) => b.r - a.r);
+    return [...autos, ...rest].map((x) => x.s);
+  })[0];
 
   const attach = useCallback(
     (url: string) => {
       const video = videoRef.current;
       if (!video) return;
 
-      // clean up previous instance
       if (hlsRef.current) {
         hlsRef.current.destroy();
         hlsRef.current = null;
@@ -70,6 +81,8 @@ export default function CustomPlayer({ sources, headers, subtitles }: Props) {
         const hls = new Hls({
           enableWorker: true,
           lowLatencyMode: false,
+          autoStartLoad: true,
+          capLevelToPlayerSize: true,
           xhrSetup: (xhr) => {
             if (headers) {
               for (const [k, v] of Object.entries(headers)) xhr.setRequestHeader(k, v);
@@ -83,9 +96,7 @@ export default function CustomPlayer({ sources, headers, subtitles }: Props) {
           video.play().catch(() => {});
         });
         hls.on(Hls.Events.ERROR, (_e, data) => {
-          if (data.fatal) {
-            setError("Stream error — try another server.");
-          }
+          if (data.fatal) setError("Stream error — try another server.");
         });
       } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
         // Safari / iOS native HLS
@@ -95,7 +106,7 @@ export default function CustomPlayer({ sources, headers, subtitles }: Props) {
         setError("This browser cannot play HLS streams.");
       }
     },
-    []
+    [headers]
   );
 
   // attach the selected source
@@ -116,6 +127,11 @@ export default function CustomPlayer({ sources, headers, subtitles }: Props) {
       }
     };
   }, [quality, list, attach]);
+
+  // playback speed
+  useEffect(() => {
+    if (videoRef.current) videoRef.current.playbackRate = speed;
+  }, [speed]);
 
   // --- controls ---
   const togglePlay = useCallback(() => {
@@ -164,7 +180,10 @@ export default function CustomPlayer({ sources, headers, subtitles }: Props) {
     if (hideTimer.current) clearTimeout(hideTimer.current);
     hideTimer.current = setTimeout(() => {
       const v = videoRef.current;
-      if (v && !v.paused) setControlsVisible(false);
+      if (v && !v.paused) {
+        setControlsVisible(false);
+        setMenu(null);
+      }
     }, 3000);
   }, []);
 
@@ -197,6 +216,8 @@ export default function CustomPlayer({ sources, headers, subtitles }: Props) {
       v.removeEventListener("ended", onEnded);
     };
   }, []);
+
+  const qualityLabel = list[quality]?.quality || "Auto";
 
   return (
     <div
@@ -243,6 +264,69 @@ export default function CustomPlayer({ sources, headers, subtitles }: Props) {
       {error && (
         <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/80 p-4 text-center text-sm text-red-300">
           {error}
+        </div>
+      )}
+
+      {/* settings menu */}
+      {menu && (
+        <div className="absolute bottom-16 right-3 z-40 w-44 overflow-hidden rounded-xl bg-black/90 text-sm text-white shadow-xl ring-1 ring-white/10 backdrop-blur">
+          {menu === "quality" ? (
+            <>
+              <p className="border-b border-white/10 px-3 py-2 text-xs font-bold uppercase tracking-wider text-zinc-400">
+                Quality
+              </p>
+              {list.length > 1 && (
+                <button
+                  onClick={() => {
+                    setQuality(0);
+                    setMenu(null);
+                  }}
+                  className={`flex w-full items-center justify-between px-3 py-2 text-left transition hover:bg-white/10 ${
+                    quality === 0 ? "text-purple-300" : ""
+                  }`}
+                >
+                  <span>Auto</span>
+                  {quality === 0 && <CheckIcon className="h-4 w-4" />}
+                </button>
+              )}
+              {list.map((s, i) => (
+                <button
+                  key={i}
+                  onClick={() => {
+                    setQuality(i);
+                    setMenu(null);
+                  }}
+                  className={`flex w-full items-center justify-between px-3 py-2 text-left transition hover:bg-white/10 ${
+                    quality === i ? "text-purple-300" : ""
+                  }`}
+                >
+                  <span>{s.quality || `Quality ${i + 1}`}</span>
+                  {quality === i && <CheckIcon className="h-4 w-4" />}
+                </button>
+              ))}
+            </>
+          ) : (
+            <>
+              <p className="border-b border-white/10 px-3 py-2 text-xs font-bold uppercase tracking-wider text-zinc-400">
+                Speed
+              </p>
+              {SPEEDS.map((sp) => (
+                <button
+                  key={sp}
+                  onClick={() => {
+                    setSpeed(sp);
+                    setMenu(null);
+                  }}
+                  className={`flex w-full items-center justify-between px-3 py-2 text-left transition hover:bg-white/10 ${
+                    speed === sp ? "text-purple-300" : ""
+                  }`}
+                >
+                  <span>{sp === 1 ? "Normal" : `${sp}x`}</span>
+                  {speed === sp && <CheckIcon className="h-4 w-4" />}
+                </button>
+              ))}
+            </>
+          )}
         </div>
       )}
 
@@ -313,20 +397,28 @@ export default function CustomPlayer({ sources, headers, subtitles }: Props) {
           )}
 
           {/* quality */}
-          {list.length > 1 && (
-            <select
-              value={quality}
-              onChange={(e) => setQuality(Number(e.target.value))}
-              className="shrink-0 rounded bg-white/10 px-1.5 py-0.5 text-xs text-white focus:outline-none"
-              aria-label="Quality"
-            >
-              {list.map((s, i) => (
-                <option key={i} value={i} className="bg-zinc-900">
-                  {s.quality}
-                </option>
-              ))}
-            </select>
-          )}
+          <button
+            onClick={() => setMenu(menu === "quality" ? null : "quality")}
+            className={`shrink-0 rounded px-2 py-1 text-xs font-semibold transition hover:bg-white/10 ${
+              menu === "quality" ? "bg-white/15" : ""
+            }`}
+            aria-label="Quality"
+            title="Quality"
+          >
+            {qualityLabel}
+          </button>
+
+          {/* speed */}
+          <button
+            onClick={() => setMenu(menu === "speed" ? null : "speed")}
+            className={`shrink-0 rounded px-2 py-1 text-xs font-semibold transition hover:bg-white/10 ${
+              menu === "speed" ? "bg-white/15" : ""
+            }`}
+            aria-label="Playback speed"
+            title="Playback speed"
+          >
+            {speed === 1 ? "1x" : `${speed}x`}
+          </button>
 
           {/* fullscreen */}
           <button onClick={toggleFullscreen} aria-label="Fullscreen" className="shrink-0 p-1">
@@ -337,5 +429,13 @@ export default function CustomPlayer({ sources, headers, subtitles }: Props) {
         </div>
       </div>
     </div>
+  );
+}
+
+function CheckIcon({ className = "" }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M20 6 9 17l-5-5" />
+    </svg>
   );
 }
