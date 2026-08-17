@@ -24,6 +24,7 @@ import { NextRequest, NextResponse } from "next/server";
 const CHALLENGE_SECRET = process.env.CHALLENGE_SECRET || "animela-js-challenge-2026";
 const CHALLENGE_COOKIE = "_cf_chl";
 const CHALLENGE_TTL_MS = 24 * 60 * 60 * 1000; // 24h
+const TURNSTILE_SITE_KEY = process.env.TURNSTILE_SITE_KEY || "";
 
 /** Synchronous FNV-1a 32-bit hash (works in edge middleware + browser JS). */
 function fnv1a(str: string): string {
@@ -57,6 +58,41 @@ function randomRayId(): string {
 
 function challengePage(url: string): NextResponse {
   const ray = randomRayId();
+  // If Turnstile is configured, render the CAPTCHA widget (primary, no secret
+  // leaked to the client). Otherwise fall back to the pure JS-hash check.
+  const turnstile = TURNSTILE_SITE_KEY
+    ? `<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+  <div class="cf-turnstile" data-sitekey="${TURNSTILE_SITE_KEY}" data-callback="onTurnstile" data-theme="dark"></div>`
+    : `<div class="spinner"></div>`;
+
+  const turnstileScript = TURNSTILE_SITE_KEY
+    ? `<script>
+    function onTurnstile(token) {
+      fetch("/api/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: token })
+      })
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if (d && d.ok) {
+          document.cookie = "${CHALLENGE_COOKIE}=" + d.cookie + "; path=/; max-age=86400; SameSite=Lax";
+          setTimeout(function(){ location.reload(); }, 300);
+        }
+      })
+      .catch(function(){ /* retry */ });
+    }
+  </script>`
+    : `<script>
+    (function(){
+      function fnv1a(s){var h=0x811c9dc5;for(var i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,0x01000193)>>>0;}return h.toString(16);}
+      var ts = Date.now();
+      var token = ts + "." + fnv1a("${CHALLENGE_SECRET}" + ts);
+      document.cookie = "${CHALLENGE_COOKIE}=" + token + "; path=/; max-age=86400; SameSite=Lax";
+      setTimeout(function(){ location.reload(); }, 600);
+    })();
+  </script>`;
+
   const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -66,18 +102,19 @@ function challengePage(url: string): NextResponse {
 <title>Performing security verification</title>
 <style>
   body{margin:0;background:#111;color:#e5e5e5;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;text-align:center}
-  .box{max-width:420px;padding:40px 28px}
+  .box{max-width:440px;padding:40px 28px}
   .spinner{width:44px;height:44px;margin:0 auto 22px;border-radius:50%;border:3px solid #333;border-top-color:#f7931e;animation:spin 1s linear infinite}
   @keyframes spin{to{transform:rotate(360deg)}}
   h1{font-size:19px;font-weight:600;margin:0 0 12px;color:#fff}
   p{font-size:14px;line-height:1.6;color:#9aa0a6;margin:0 0 22px}
+  .cf-turnstile{margin:0 auto;width:fit-content}
   .foot{margin-top:26px;font-size:12px;color:#6b7280}
   .foot a{color:#f7931e;text-decoration:none}
 </style>
 </head>
 <body>
   <div class="box">
-    <div class="spinner"></div>
+    ${turnstile}
     <h1>Performing security verification</h1>
     <p>This website uses a security service to protect against malicious bots. This page is displayed while the website verifies you are not a bot.</p>
     <div class="foot">
@@ -85,15 +122,7 @@ function challengePage(url: string): NextResponse {
       Performance &amp; Security by <a href="https://www.cloudflare.com" rel="noreferrer">Cloudflare</a>
     </div>
   </div>
-  <script>
-    (function(){
-      function fnv1a(s){var h=0x811c9dc5;for(var i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,0x01000193)>>>0;}return h.toString(16);}
-      var ts = Date.now();
-      var token = ts + "." + fnv1a("${CHALLENGE_SECRET}" + ts);
-      document.cookie = "${CHALLENGE_COOKIE}=" + token + "; path=/; max-age=86400; SameSite=Lax";
-      setTimeout(function(){ location.reload(); }, 600);
-    })();
-  </script>
+  ${turnstileScript}
 </body>
 </html>`;
   return new NextResponse(html, {
