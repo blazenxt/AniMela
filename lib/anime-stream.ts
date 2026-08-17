@@ -60,13 +60,15 @@ export interface StreamProvider {
 
 import { AnimePaheProvider } from "./providers/animepahe";
 import { AnimelokProvider } from "./providers/animelok";
+import { AniDBProvider } from "./providers/anidb";
 
 const PROVIDERS: Record<string, StreamProvider> = {
+  anidb: AniDBProvider,
   animelok: AnimelokProvider,
   animepahe: AnimePaheProvider,
 };
 
-const ORDER = (process.env.ANIME_PROVIDER_ORDER || "animelok,animepahe")
+const ORDER = (process.env.ANIME_PROVIDER_ORDER || "anidb,animelok,animepahe")
   .split(",")
   .map((s) => s.trim().toLowerCase())
   .filter(Boolean);
