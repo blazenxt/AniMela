@@ -234,6 +234,44 @@ function parseDataLink(link: string): { accessId: string; v: number } | null {
   return { accessId: m[1], v: Number(m[2]) };
 }
 
+function qualityLabel(h: number): string {
+  if (h >= 2160) return "4K";
+  if (h >= 1080) return "1080p";
+  if (h >= 720) return "720p";
+  if (h >= 480) return "480p";
+  if (h >= 360) return "360p";
+  return `${h}p`;
+}
+
+/**
+ * Fetch a flixcloud master m3u8 (IP-bound to our server, so we must fetch it
+ * here) and parse its quality variants. Returns [{quality, url}] best-first.
+ */
+async function parseFlixMaster(master: string, referer: string): Promise<{ quality: string; url: string }[]> {
+  try {
+    const pl = await (await fetch(master, {
+      headers: { "User-Agent": UA, Referer: referer },
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    })).text();
+    const lines = pl.split("\n");
+    const out: { quality: string; url: string }[] = [];
+    for (let i = 0; i < lines.length; i++) {
+      const m = lines[i].match(/RESOLUTION=\d+x(\d+)/i);
+      if (m) {
+        const uri = lines[i + 1]?.trim();
+        if (uri && !uri.startsWith("#")) {
+          const abs = new URL(uri, master).toString();
+          const quality = qualityLabel(Number(m[1]));
+          if (!out.some((o) => o.quality === quality)) out.push({ quality, url: abs });
+        }
+      }
+    }
+    return out.sort((a, b) => Number(b.quality.replace(/\D/g, "")) - Number(a.quality.replace(/\D/g, "")));
+  } catch {
+    return [];
+  }
+}
+
 export interface AnimelokLanguage {
   code: string; // "hindi" | "tamil" | "japanese" ...
   label: string; // "Hindi" | "Tamil" | "Japanese" ...
@@ -341,11 +379,17 @@ export const AnimelokProvider: StreamProvider = {
       if (!parsed) continue;
       try {
         const decrypted = await decryptFlixcloud(parsed.accessId, parsed.v, `${BASE}/`);
+        // Parse the master playlist into quality variants (best-first).
+        const variants = await parseFlixMaster(decrypted.url, `${BASE}/`);
+        const sources = variants.length
+          ? variants.map((v) => ({ url: v.url, quality: v.quality, isM3U8: true }))
+          : [{ url: decrypted.url, quality: "default", isM3U8: true }];
+
         return {
           provider: "animelok",
           server: s.serverName,
           subOrDub: s.dataType === "dub" ? "dub" : "sub",
-          sources: [{ url: decrypted.url, quality: "default", isM3U8: true }],
+          sources,
           subtitles: decrypted.subtitles.map((t) => ({ url: t.url, lang: t.language })),
           headers: { Referer: `${BASE}/` },
           // Always include the embed fallback: the direct stream is IP-bound to
