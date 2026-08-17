@@ -3,30 +3,31 @@ import { NextRequest, NextResponse } from "next/server";
 /**
  * Server-side protection middleware (single-instance Railway deployment).
  *
- * Layers:
- *   1. **Perma-ban** — in-memory + Upstash Redis (cross-restart). Banned IPs
- *      get 403 forever.
- *   2. **Allow-list** — Googlebot / Bingbot / MSNBot pass through untouched
- *      (so the site stays indexable by search).
- *   3. **Bot UA block** — known crawlers/scrapers/headless tools → ban + 403.
- *   4. **Header fingerprint** — missing browser headers → ban + 403.
- *   5. **JS challenge** — unverified visitors get a Cloudflare-style
- *      "Performing security verification" page that runs a small JS check,
- *      sets a clearance cookie, and reloads. No-JS bots never get through.
- *   6. **Rate limiting** on API routes + security headers everywhere.
+ * Safe-by-default design (learned from a false-positive that locked out a real
+ * user): a legitimate browser is NEVER hard-blocked. The layers are:
  *
- * ⚠️ Honest limits: a bot that drives a real browser engine (Playwright +
- * stealth + residential IP + JS) is indistinguishable from a human — no site
- * can block that. This blocks the 99% of bots that use simple HTTP clients.
+ *   1. **Exemptions** — /api/health, /api/hls, /api/verify always pass.
+ *   2. **Search allow-list** — Googlebot/Bingbot/MSNBot pass (indexable).
+ *   3. **Hard bot UA block** — only UNambiguous script/scraper User-Agents
+ *      (curl, wget, python, go-http-client, headless, etc.) get 403 + banned.
+ *      Real browsers never match these.
+ *   4. **Universal JS/Turnstile challenge** — every page request without a
+ *      valid clearance cookie gets the verification page. No-JS bots are stuck
+ *      here forever; humans pass in <1s.
+ *   5. **Rate limiting** on API routes (soft 429 — never a permanent ban).
+ *   6. **Security headers** everywhere.
+ *
+ * We do NOT fingerprint/ban on missing headers: browser fetch() and privacy
+ * extensions legitimately vary Accept / Accept-Language / Sec-Fetch, and false
+ * bans locked out real visitors. The challenge + hard-UA list is sufficient.
  */
 
-// ── JS challenge config ─────────────────────────────────────────────────────
+// ── Challenge config ────────────────────────────────────────────────────────
 const CHALLENGE_SECRET = process.env.CHALLENGE_SECRET || "animela-js-challenge-2026";
 const CHALLENGE_COOKIE = "_cf_chl";
-const CHALLENGE_TTL_MS = 24 * 60 * 60 * 1000; // 24h
+const CHALLENGE_TTL_MS = 24 * 60 * 60 * 1000;
 const TURNSTILE_SITE_KEY = process.env.TURNSTILE_SITE_KEY || "";
 
-/** Synchronous FNV-1a 32-bit hash (works in edge middleware + browser JS). */
 function fnv1a(str: string): string {
   let h = 0x811c9dc5;
   for (let i = 0; i < str.length; i++) {
@@ -56,10 +57,8 @@ function randomRayId(): string {
   return s;
 }
 
-function challengePage(url: string): NextResponse {
+function challengePage(): NextResponse {
   const ray = randomRayId();
-  // If Turnstile is configured, render the CAPTCHA widget (primary, no secret
-  // leaked to the client). Otherwise fall back to the pure JS-hash check.
   const turnstile = TURNSTILE_SITE_KEY
     ? `<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
   <div class="cf-turnstile" data-sitekey="${TURNSTILE_SITE_KEY}" data-callback="onTurnstile" data-theme="dark"></div>`
@@ -68,26 +67,22 @@ function challengePage(url: string): NextResponse {
   const turnstileScript = TURNSTILE_SITE_KEY
     ? `<script>
     function onTurnstile(token) {
-      fetch("/api/verify", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token: token })
-      })
-      .then(function(r){ return r.json(); })
-      .then(function(d){
-        if (d && d.ok) {
-          document.cookie = "${CHALLENGE_COOKIE}=" + d.cookie + "; path=/; max-age=86400; SameSite=Lax";
-          setTimeout(function(){ location.reload(); }, 300);
-        }
-      })
-      .catch(function(){ /* retry */ });
+      fetch("/api/verify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: token }) })
+        .then(function(r){ return r.json(); })
+        .then(function(d){
+          if (d && d.ok) {
+            document.cookie = "${CHALLENGE_COOKIE}=" + d.cookie + "; path=/; max-age=86400; SameSite=Lax";
+            setTimeout(function(){ location.reload(); }, 300);
+          }
+        })
+        .catch(function(){});
     }
   </script>`
     : `<script>
     (function(){
-      function fnv1a(s){var h=0x811c9dc5;for(var i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,0x01000193)>>>0;}return h.toString(16);}
+      function f(s){var h=0x811c9dc5;for(var i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,0x01000193)>>>0;}return h.toString(16);}
       var ts = Date.now();
-      var token = ts + "." + fnv1a("${CHALLENGE_SECRET}" + ts);
+      var token = ts + "." + f("${CHALLENGE_SECRET}" + ts);
       document.cookie = "${CHALLENGE_COOKIE}=" + token + "; path=/; max-age=86400; SameSite=Lax";
       setTimeout(function(){ location.reload(); }, 600);
     })();
@@ -136,13 +131,16 @@ function challengePage(url: string): NextResponse {
 }
 
 // ── Upstash Redis (persistent bans) ─────────────────────────────────────────
+// NOTE: key is versioned (banned_ips_v2) so any stale false-positive bans from
+// an earlier buggy build are ignored going forward.
 const REDIS_URL = process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
+const BAN_KEY = "banned_ips_v2";
 
 async function redisSismember(ip: string): Promise<boolean> {
   if (!REDIS_URL || !REDIS_TOKEN) return false;
   try {
-    const res = await fetch(`${REDIS_URL}/sismember/banned_ips/${encodeURIComponent(ip)}`, {
+    const res = await fetch(`${REDIS_URL}/sismember/${BAN_KEY}/${encodeURIComponent(ip)}`, {
       headers: { Authorization: `Bearer ${REDIS_TOKEN}` },
       signal: AbortSignal.timeout(1500),
     });
@@ -157,7 +155,7 @@ async function redisSismember(ip: string): Promise<boolean> {
 async function redisSadd(ip: string): Promise<void> {
   if (!REDIS_URL || !REDIS_TOKEN) return;
   try {
-    await fetch(`${REDIS_URL}/sadd/banned_ips/${encodeURIComponent(ip)}`, {
+    await fetch(`${REDIS_URL}/sadd/${BAN_KEY}/${encodeURIComponent(ip)}`, {
       method: "POST",
       headers: { Authorization: `Bearer ${REDIS_TOKEN}` },
       signal: AbortSignal.timeout(1500),
@@ -167,21 +165,11 @@ async function redisSadd(ip: string): Promise<void> {
   }
 }
 
-// ── Bot detection ───────────────────────────────────────────────────────────
+// ── Bot detection (hard/unambiguous script UAs only) ────────────────────────
 const ALLOWED_UA = [/googlebot/i, /bingbot/i, /msnbot/i];
 
-const BOT_UA = [
-  /bot/i,
-  /crawler/i,
-  /spider/i,
-  /crawl/i,
-  /scrape/i,
-  /scrapy/i,
-  /headless/i,
-  /phantomjs/i,
-  /selenium/i,
-  /puppeteer/i,
-  /playwright/i,
+// These are UAs that a REAL browser never sends — safe to hard-block + ban.
+const HARD_BOT_UA = [
   /curl\//i,
   /wget\//i,
   /python-requests/i,
@@ -189,18 +177,34 @@ const BOT_UA = [
   /aiohttp/i,
   /go-http-client/i,
   /okhttp/i,
-  /axios/i,
   /node-fetch/i,
+  /axios/i,
   /java\/[\d.]+/i,
   /libwww-perl/i,
-  /httpclient/i,
   /postman/i,
   /insomnia/i,
+  /scrapy/i,
+  /headless/i,
+  /phantomjs/i,
+  /selenium/i,
+  /puppeteer/i,
+  /playwright/i,
   /nikto/i,
   /sqlmap/i,
   /nmap/i,
   /masscan/i,
   /zgrab/i,
+  /httpclient/i,
+];
+
+// Secondary crawler/SEO UAs — blocked (403) but NOT permanently banned, since
+// some (social previews) are semi-legitimate.
+const CRAWLER_UA = [
+  /bot/i,
+  /crawler/i,
+  /spider/i,
+  /crawl/i,
+  /scrape/i,
   /facebookexternalhit/i,
   /twitterbot/i,
   /telegrambot/i,
@@ -227,13 +231,14 @@ const BOT_UA = [
 function isAllowedBot(ua: string): boolean {
   return ALLOWED_UA.some((re) => re.test(ua));
 }
-
-function isBotUA(ua: string): boolean {
-  if (!ua) return true;
-  return BOT_UA.some((re) => re.test(ua));
+function isHardBot(ua: string): boolean {
+  return HARD_BOT_UA.some((re) => re.test(ua));
+}
+function isCrawler(ua: string): boolean {
+  return CRAWLER_UA.some((re) => re.test(ua));
 }
 
-// ── State (in-memory, backed by Redis) ─────────────────────────────────────
+// ── State ───────────────────────────────────────────────────────────────────
 type Bucket = { count: number; reset: number };
 const g = globalThis as unknown as {
   __animelaBuckets?: Map<string, Bucket>;
@@ -243,7 +248,7 @@ const buckets = (g.__animelaBuckets ??= new Map<string, Bucket>());
 const banned = (g.__animelaBanned ??= new Set<string>());
 
 const WINDOW_MS = 60_000;
-const MAX_REQUESTS = 180;
+const MAX_REQUESTS = 600; // generous; only trips on real abuse
 
 function clientIp(req: NextRequest): string {
   return (
@@ -261,25 +266,12 @@ function rateLimit(ip: string): boolean {
     return true;
   }
   b.count++;
-  if (b.count > MAX_REQUESTS) return false;
-  return true;
+  return b.count <= MAX_REQUESTS;
 }
 
 function prune() {
   const now = Date.now();
   for (const [k, v] of buckets) if (now > v.reset) buckets.delete(k);
-}
-
-function missingBrowserHeaders(req: NextRequest): boolean {
-  const accept = req.headers.get("accept") || "";
-  const acceptLanguage = req.headers.get("accept-language") || "";
-  // Real browsers ALWAYS send both Accept and Accept-Language on every request
-  // (page navigations AND fetch/XHR). Most HTTP-client bots omit one or both.
-  // NOTE: do NOT require "text/html" in Accept — browser fetch() to APIs sends
-  // "Accept: */*" or "application/json", which is legitimate.
-  if (!accept) return true;
-  if (!acceptLanguage) return true;
-  return false;
 }
 
 const SECURITY_HEADERS: Record<string, string> = {
@@ -289,6 +281,11 @@ const SECURITY_HEADERS: Record<string, string> = {
   "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=()",
   "X-DNS-Prefetch-Control": "off",
 };
+
+function withHeaders(res: NextResponse): NextResponse {
+  for (const [k, v] of Object.entries(SECURITY_HEADERS)) res.headers.set(k, v);
+  return res;
+}
 
 function blockResponse(status: number, message: string): NextResponse {
   return new NextResponse(message, {
@@ -306,31 +303,18 @@ export async function middleware(req: NextRequest) {
   const ua = req.headers.get("user-agent") || "";
   const isApi = pathname.startsWith("/api/");
 
-  // Healthcheck, HLS proxy, and the Turnstile verify endpoint must NEVER be
-  // blocked. Railway's healthcheck is a plain HTTP client (no browser headers),
-  // the HLS proxy streams segments without browser headers, and /api/verify is
-  // the endpoint the challenge page POSTs its Turnstile token to — blocking it
-  // would make verification impossible.
+  // 1. Exemptions — health, HLS proxy, and the Turnstile verify endpoint.
   if (pathname === "/api/health" || pathname === "/api/hls" || pathname === "/api/verify") {
-    const res = NextResponse.next();
-    for (const [k, v] of Object.entries(SECURITY_HEADERS)) res.headers.set(k, v);
-    return res;
+    return withHeaders(NextResponse.next());
   }
 
-  // 1. Perma-ban (memory, then Redis for cross-restart persistence)
-  if (banned.has(ip) || (await redisSismember(ip))) {
-    return blockResponse(403, "Access denied.");
-  }
-
-  // 2. Allow-list legitimate search engines (indexable)
+  // 2. Search-engine allow-list.
   if (isAllowedBot(ua)) {
-    const res = NextResponse.next();
-    for (const [k, v] of Object.entries(SECURITY_HEADERS)) res.headers.set(k, v);
-    return res;
+    return withHeaders(NextResponse.next());
   }
 
-  // 3. Bot UA → permanent ban
-  if (isBotUA(ua)) {
+  // 3. Hard script bots → permanent ban. Real browsers never match these.
+  if (isHardBot(ua)) {
     if (ip !== "unknown") {
       banned.add(ip);
       await redisSadd(ip);
@@ -338,33 +322,22 @@ export async function middleware(req: NextRequest) {
     return blockResponse(403, "Access denied.");
   }
 
-  // 4. Header fingerprint → permanent ban
-  if (missingBrowserHeaders(req)) {
-    if (ip !== "unknown") {
-      banned.add(ip);
-      await redisSadd(ip);
-    }
+  // 4. Secondary crawlers → 403 (no permanent ban).
+  if (isCrawler(ua)) {
     return blockResponse(403, "Access denied.");
   }
 
-  // 5. JS challenge for page requests (not API / static)
+  // 5. Universal challenge for page requests without a clearance cookie.
   if (!isApi && !validChallenge(req)) {
-    return challengePage(req.url);
+    return challengePage();
   }
 
-  // 6. Rate-limit API routes (exempt HLS proxy + health)
-  if (isApi) {
-    const exempt = pathname === "/api/hls" || pathname === "/api/health";
-    if (!exempt && !rateLimit(ip)) {
-      banned.add(ip);
-      await redisSadd(ip);
-      return blockResponse(429, "Too many requests.");
-    }
+  // 6. Rate-limit API routes (soft 429, no ban).
+  if (isApi && !rateLimit(ip)) {
+    return blockResponse(429, "Too many requests.");
   }
 
-  const res = NextResponse.next();
-  for (const [k, v] of Object.entries(SECURITY_HEADERS)) res.headers.set(k, v);
-  return res;
+  return withHeaders(NextResponse.next());
 }
 
 export const config = {
