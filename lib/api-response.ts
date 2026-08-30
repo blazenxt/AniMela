@@ -2,13 +2,18 @@ import { NextResponse } from "next/server";
 
 /**
  * Small helpers to keep every API route consistent:
- *   - JSON responses with permissive CORS (so other apps can call us)
+ *   - JSON responses with same-origin CORS (the API is consumed by the app
+ *     itself; third-party browser access is not needed)
  *   - uniform error shape
  *   - uniform success shape
+ *
+ * Note: CORS only governs *browser* cross-origin requests. Server-side
+ * scrapers ignore it entirely — it is not an anti-scraping mechanism.
  */
 
 const CORS = {
-  "Access-Control-Allow-Origin": "*",
+  // No `Access-Control-Allow-Origin` is set: browsers then block cross-origin
+  // reads by default, while same-origin requests (our own app) are unaffected.
   "Access-Control-Allow-Methods": "GET, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type",
 };

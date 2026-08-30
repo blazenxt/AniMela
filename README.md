@@ -12,9 +12,9 @@ browse by genre, keep a watchlist, and play instantly. No accounts, no downloads
 
 ## ✨ Features
 
-- **Home** — cinematic featured hero + `Trending Movies`, `Trending Series`, `Popular Anime` rows.
+- **Home** — cinematic featured hero + `Trending Movies`, `Trending Series`, `Trending Anime` rows.
 - **Movies / Series** — paginated grids ("Load more") of weekly trending titles.
-- **Anime** — dedicated anime browser with **Series / Movies** tabs and **Popular / Top Rated** sorting (Japanese animation).
+- **Anime** — dedicated anime browser with **Series / Movies** tabs and **Trending / Popular / Top Rated** sorting, powered by real anime metadata (AniList) — Japanese &amp; English titles, studios, airing status and MAL-style scores. Includes **episode streaming** with **Sub/Dub** support (HiAnime → Consumet fallback).
 - **Genres** — browse movies & series by genre (Movies + Series genre lists).
 - **Search** — live multi-search across movies, series and people.
 - **Movie pages** — backdrop hero, poster, genres, rating, runtime, IMDb link, cast, "More like this", and playback.
@@ -54,6 +54,46 @@ The server binds to `0.0.0.0` so it can be previewed or deployed anywhere.
 | Variable | Purpose | Default |
 | --- | --- | --- |
 | `NEXT_PUBLIC_CINEZO_BASE` | Override the metadata API host if the domain changes | `https://cinezo.org` |
+| `ANILIST_BASE` | AniList GraphQL endpoint | `https://graphql.anilist.co` |
+| `JIKAN_BASE` | Jikan v4 base (metadata fallback) | `https://api.jikan.moe/v4` |
+| `ANIME_PROVIDER_ORDER` | Anime stream provider priority | `animelok,animepahe` |
+| `ANIMELOK_BASE` | Animelok base host | `https://animelok.live` |
+| `ANIMEPAHE_BASE` | AnimePahe mirror (rotates: `.si`/`.com`/`.org`) | `https://animepahe.com` |
+| `MOVIE_PROVIDER_ORDER` | Hindi/Desi movie source priority | `sevenhitmovies` |
+| `SEVENHITMOVIES_BASE` | SevenHitMovies domain (rotates) | `https://7hitmovies.net` |
+| `GDTOT_CRYPT` | GDToT `crypt` cookie (free account) | *(unset)* |
+| `SHARER_XSRF_TOKEN` | Sharer.pw XSRF token (free account) | *(unset)* |
+| `SHARER_LARAVEL_SESSION` | Sharer.pw session cookie (free account) | *(unset)* |
+| `APPDRIVE_EMAIL` / `APPDRIVE_PASSWORD` | AppDrive-family account | *(unset)* |
+
+### Link shortener bypass
+
+The Hindi movie sources wrap their real download links (Google Drive) inside
+link-protector pages. `/api/v1/unshorten?url=…` resolves these **server-side for
+free**, with dedicated handlers for the common file-host protectors (ported from
+the open-source Link-Bypasser ecosystem):
+
+| Protector | Method | Free auth needed? |
+| --- | --- | --- |
+| AdFly | decrypt `ysmm` JS blob | none |
+| GPLinks / gtlinks.me / gyanilinks | POST `/links/go` | none |
+| DropLink | POST form | none |
+| GDToT | `crypt` cookie → `/dld` → base64 → GDrive | free GDToT account cookie (`GDTOT_CRYPT`) |
+| Sharer.pw | `_token` → POST `/dl` | free account cookies (`SHARER_XSRF_TOKEN`, `SHARER_LARAVEL_SESSION`) |
+| AppDrive family | `key` + multipart POST | free account (`APPDRIVE_EMAIL` / `APPDRIVE_PASSWORD`) |
+
+Anything else falls back to redirect-follow + embedded/cipher extraction, and
+only accepts known download hosts (no favicon/ad false positives).
+
+> ⚠️ **Google reCAPTCHA-gated protectors** (e.g. mobilejsr's "three step auth")
+> cannot be auto-bypassed for free — there is no free solver for Google's
+> reCAPTCHA. Those return `method: "manual"` and the UI opens the original link.
+> Everything *except* the captcha step is bypassed free.
+
+The movie detail page has a **"resolve"** button per link that calls this
+endpoint and swaps in the direct Google Drive link when it succeeds.
+
+See `.env.example` for the full annotated set.
 
 ---
 
@@ -178,7 +218,60 @@ Posters/backdrops use TMDB's image CDN: `https://image.tmdb.org/t/p/{size}{path}
 3. **Caching** — 5-minute in-memory TTL so back/forward navigation is instant.
 4. **Hard timeouts** — every request aborts fast instead of hanging the page.
 
-### 2. Playback — `components/Player.tsx`
+### 2. Anime metadata — AniList (primary) + Jikan (fallback)
+
+The anime section no longer uses the old TMDB "Animation + Japan" genre filter.
+Real anime metadata comes from **AniList's GraphQL API** (Japanese/English/native
+titles, studios, MAL-style score, airing status, episode counts), with **Jikan v4**
+as a fallback. Implemented in `lib/anilist.ts` (types/queries) + `lib/anime-meta.ts`
+(server fetch + 5-min cache + fallback).
+
+### 3. Anime streaming — Animelok (LIVE source, ex Animerulz)
+
+Episode streams resolve through a **provider abstraction** (`lib/anime-stream.ts`)
+with ordered fallback. The primary source is **Animelok** (animelok.live, the
+rebrand of Animerulz/Hiddenleaf), an Indian-focused anime site with Japanese +
+regional dubs (Hindi, Telugu, Tamil, Malayalam, Bengali, Kannada).
+
+**How it works** (`lib/providers/animelok.ts` + `lib/flixcloud-decrypt.ts`):
+
+1. Search by title → resolve the site's hex id + episode count.
+2. `GET /api/flix/{anilistId}/{ep}` → flixcloud.cc server list (HD-1/HD-2, sub/dub).
+3. **Decrypt** flixcloud's rotating WASM-based AES-256-CBC scheme (ported from
+   ReAnime.to-API) → the real signed `.m3u8` URL + subtitles.
+4. `app/api/hls/route.ts` proxies the playlist + segments so the browser never
+   hits the protected CDN directly.
+
+> ⚠️ **Remaining limitation:** flixcloud IP-binds its stream tokens to the
+> decryptor's IP and its video CDN (`fetch*.flixcloud.cc`) Cloudflare-blocks
+> datacenter IPs (Railway/Vercel). Decryption works server-side, but final
+> playback may 403 from a datacenter host — a fixed residential IP / proxy, or
+> running the resolver near the user, avoids this. This is a hosting constraint,
+> not a code bug.
+
+The old `animepahe` provider remains as a fallback (`lib/providers/animepahe.ts`,
+via `@consumet/extensions`). Provider order is configurable via
+`ANIME_PROVIDER_ORDER` (default `animelok,animepahe`).
+
+### 4. Hindi / Desi movies — download-oriented sources
+
+A **"Hindi Movies"** section (`/hindi`) surfaces Hindi-dubbed, Bollywood and
+regional movies from download-oriented sites (TheMoviesFlix, Vegamovies,
+KatmovieHD, 7HitMovies style). These sites expose **metadata + download links**
+(Google Drive / GDToT behind a shortener), not HLS streams — so AniMela shows
+them as "Download / Watch" buttons that open in a new tab rather than feeding
+the HTML5 player.
+
+Implemented via a `MovieSourceProvider` abstraction (`lib/movie-sources.ts`),
+mirroring the anime provider layer. The first provider (`lib/providers/sevenhitmovies.ts`)
+uses 7HitMovies' **WordPress REST API** (`/wp-json/wp/v2/posts`) for clean JSON
+— no fragile HTML scraping. Its domain is configurable via `SEVENHITMOVIES_BASE`.
+
+> ⚠️ These sites rotate domains constantly and are behind Cloudflare +
+> link-shortener ad layers; datacenter IPs (Railway/Vercel) are frequently
+> challenged. Provider order is configurable via `MOVIE_PROVIDER_ORDER`.
+
+### 5. Playback — `components/Player.tsx`
 
 Playback is orchestrated: the player first tries a **direct HD stream** and falls back to an
 **embedded player** if no direct source resolves. A click-to-play overlay prevents the embed's
@@ -194,7 +287,7 @@ first-tap ad/redirect from hijacking the page.
 > WebAssembly decryption core. Its upstream endpoints are subject to change, so the app is built
 > to degrade gracefully to embeds.
 
-### 3. Experimental — SpeedRaceLight (`lib/speedracelight.ts`)
+### 6. Experimental — SpeedRaceLight (`lib/speedracelight.ts`)
 
 An alternative HLS pipeline (seed → encrypted sources → decrypt). Documented but the decryption
 step is a stub pending a byte-exact cipher port. Kept for reference.

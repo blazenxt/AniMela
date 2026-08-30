@@ -22,6 +22,8 @@
  *     same-origin proxy at /api/proxy (Railway has fast, non-blocked egress).
  */
 
+import type { AnimeItem } from "./anilist";
+
 const BASE = (process.env.NEXT_PUBLIC_CINEZO_BASE || "https://cinezo.org").replace(/\/+$/, "");
 
 const DIRECT_TIMEOUT_MS = 4000;
@@ -111,6 +113,67 @@ export interface Genre {
   name: string;
 }
 
+/** Fetch our own public /api/v1 endpoints and unwrap the { ok, data } envelope. */
+async function fetchV1<T = any>(path: string): Promise<T> {
+  const res = await fetch(`/api/v1${path}`, {
+    headers: { Accept: "application/json" },
+    signal: AbortSignal.timeout(12000),
+  });
+  if (!res.ok) throw new Error(`Request failed (${res.status})`);
+  const json = await res.json();
+  if (!json?.ok) throw new Error(json?.error || "Request failed");
+  return json.data as T;
+}
+
+/** Result shape returned by AniList-backed anime endpoints. */
+export interface AnimePage {
+  page: number;
+  has_next_page: boolean;
+  results: AnimeItem[];
+}
+
+/** Lightweight episode shape (mirrors lib/anime-stream.ts, client-safe). */
+export interface AnimeEpisode {
+  id: string;
+  number: number;
+  title?: string;
+  image?: string;
+  isFiller?: boolean;
+}
+
+/** Lightweight stream source shape (client-safe). */
+export interface AnimeStreamSource {
+  url: string;
+  quality: string;
+  isM3U8: boolean;
+}
+
+/** Desi/Hindi movie item (from download-oriented providers). */
+export interface HindiMovieItem {
+  provider: string;
+  id: string;
+  title: string;
+  slug?: string;
+  link: string;
+  image?: string;
+  date?: string;
+}
+
+/** Desi/Hindi movie detail + download links. */
+export interface HindiMovieDetail {
+  provider: string;
+  id: string;
+  title: string;
+  slug?: string;
+  link: string;
+  image?: string;
+  date?: string;
+  year?: string;
+  rating?: string;
+  plot?: string;
+  links: { label: string; url: string }[];
+}
+
 export const api = {
   trendingMovies: (page = 1) => request(`${BASE}/api/tmdb/trending/movie/week?page=${page}`),
   trendingTv: (page = 1) => request(`${BASE}/api/tmdb/trending/tv/week?page=${page}`),
@@ -123,22 +186,71 @@ export const api = {
   genreList: (kind: Kind) => request(`${BASE}/api/tmdb/genre/${kind}/list`),
   discover: (kind: Kind, genreId: number | string, page = 1) =>
     request(`${BASE}/api/tmdb/discover/${kind}?with_genres=${genreId}&page=${page}`),
+  // NOTE: cinezo's `/similar` returns a popularity-sorted list (unrelated
+  // titles), while `/recommendations` returns actually-relevant movies — so we
+  // use recommendations for the "More like this" row.
   similar: (kind: Kind, id: number | string, page = 1) =>
-    request(`${BASE}/api/tmdb/${kind}/${id}/similar?page=${page}`),
+    request(`${BASE}/api/tmdb/${kind}/${id}/recommendations?page=${page}`),
   credits: (kind: Kind, id: number | string) => request(`${BASE}/api/tmdb/${kind}/${id}/credits`),
   topRatedTv: (page = 1) => request(`${BASE}/api/tmdb/tv/top_rated?page=${page}`),
   topRatedMovies: (page = 1) => request(`${BASE}/api/tmdb/movie/top_rated?page=${page}`),
-  // Anime (Animation genre 16, Japanese origin) — see app/anime/page.tsx
-  animeSeries: (page = 1, sort: "popularity" | "rating" = "popularity") =>
-    request(
-      `${BASE}/api/tmdb/discover/tv?with_genres=16&with_origin_country=JP&sort_by=${
-        sort === "rating" ? "vote_average.desc" : "popularity.desc"
-      }&include_adult=false&page=${page}`
-    ),
-  animeMovies: (page = 1, sort: "popularity" | "rating" = "popularity") =>
-    request(
-      `${BASE}/api/tmdb/discover/movie?with_genres=16&with_origin_country=JP&sort_by=${
-        sort === "rating" ? "vote_average.desc" : "popularity.desc"
-      }&include_adult=false&page=${page}`
-    ),
+
+  // ── Anime (AniList-backed) ─────────────────────────────────────────────
+  // Replaces the old TMDB "Animation + Japan" filter with real anime metadata.
+  animeBrowse: (opts: {
+    type?: "series" | "movies";
+    sort?: "popularity" | "rating" | "trending";
+    genre?: string;
+    page?: number;
+  } = {}): Promise<AnimePage> => {
+    const p = new URLSearchParams();
+    p.set("type", opts.type || "series");
+    p.set("sort", opts.sort || "popularity");
+    p.set("page", String(opts.page || 1));
+    if (opts.genre) p.set("genre", opts.genre);
+    return fetchV1<AnimePage>(`/anime?${p.toString()}`);
+  },
+  animeSearch: (query: string, page = 1): Promise<AnimePage> =>
+    fetchV1<AnimePage>(`/anime/search?q=${encodeURIComponent(query)}&page=${page}`),
+  animeDetail: (id: number | string): Promise<AnimeItem> =>
+    fetchV1<AnimeItem>(`/anime/${id}`),
+  animeGenres: (): Promise<{ genres: string[] }> => fetchV1(`/anime/genres`),
+  animeEpisodes: (id: number | string): Promise<{ available: boolean; episodes: AnimeEpisode[] }> =>
+    fetchV1(`/anime/${id}/episodes`),
+  animeStream: (
+    id: number | string,
+    episode: number,
+    dub = false
+  ): Promise<{ available: boolean; sources?: AnimeStreamSource[]; subtitles?: { url: string; lang: string }[]; headers?: Record<string, string>; embedUrl?: string; provider?: string; server?: string } & Record<string, unknown>> =>
+    fetchV1(`/anime/${id}/stream?ep=${episode}&dub=${dub ? 1 : 0}`),
+  animeServers: (
+    id: number | string,
+    episode: number
+  ): Promise<{
+    available: boolean;
+    servers: {
+      name: string;
+      type: "multi";
+      token: string;
+      audioTracks: string[];
+      qualities?: { quality: string; token: string }[];
+      referer?: string;
+    }[];
+    languages: { code: string; label: string; episodes?: number | null }[];
+  }> => fetchV1(`/anime/${id}/servers?ep=${episode}`),
+  /** Decrypt an opaque server token back into its player URL. */
+  resolveEmbed: (token: string): Promise<{ url: string }> =>
+    fetchV1(`/resolve?token=${encodeURIComponent(token)}`),
+
+  // ── Hindi / Desi movies (download-oriented providers) ─────────────────
+  hindiSearch: (query: string, page = 1): Promise<{ results: HindiMovieItem[] }> =>
+    fetchV1(`/hindi/search?q=${encodeURIComponent(query)}&page=${page}`),
+  hindiRecent: (page = 1): Promise<{ results: HindiMovieItem[] }> =>
+    fetchV1(`/hindi/recent?page=${page}`),
+  hindiDetail: (provider: string, id: string): Promise<HindiMovieDetail> =>
+    fetchV1(`/hindi/${provider}/${id}`),
+  unshorten: (
+    url: string
+  ): Promise<{ ok: boolean; originalUrl: string; resolvedUrl?: string; host?: string; method: "adfly" | "gplinks" | "droplink" | "gdtot" | "sharer" | "appdrive" | "redirect" | "embedded" | "manual"; note?: string; chain?: string[]; dead?: boolean }> =>
+    fetchV1(`/unshorten?url=${encodeURIComponent(url)}`),
 };
